@@ -8,38 +8,24 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"encoding/json"
 )
 
 func fileUploadHandler(w http.ResponseWriter, r *http.Request) {
 	// limit file to size of 10MB
-
-	r.Body = http.MaxBytesReader(w, r.Body, 10<<30)
+	
+	r.Body = http.MaxBytesReader(w, r.Body, 10 << 20)
 
 	file, handler, err := r.FormFile("myFile")
 
 	if err != nil {
-		http.Error(w, "error retrieving the file", http.StatusInternalServerError)
+		http.Error(w, "error retrieving the file", http.StatusBadRequest)
 		return
 	}
+
 	defer file.Close()
 
-	fmt.Println(w, "Uploaded file: %s\n", handler.Filename)
-	fmt.Println(w, "Uploaded file of size: %s\n", handler.Size)
-	fmt.Println(w, "MIME Header %v\n", handler.Header)
 
-	// save file locally
-	dst, err := createFile(handler.Filename)
-
-	if err != nil {
-		http.Error(w, "error saving the file", http.StatusInternalServerError)
-		return
-	}
-	defer dst.Close()
-
-	// copy the uploaded file to the destination file
-	if _, err := dst.ReadFrom(file); err != nil {
-		http.Error(w, "error saving file", http.StatusInternalServerError)
-	}
 
 	fileBytes, err := io.ReadAll(file)
 
@@ -49,15 +35,31 @@ func fileUploadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !isValidFileType(fileBytes) {
-		http.Error(w, "Invalid file type, only pdfs are allowed", http.StatusInternalServerError)
+		http.Error(w, "Invalid file type, only PDFs are allowed", http.StatusInternalServerError)
 		return
 	}
 
-	if _, err := dst.Write(fileBytes); err != nil {
-		http.Error(w, "error saving file", http.StatusInternalServerError)
+	dst, err := createFile(handler.Filename)
+
+	if err != nil { 
+		http.Error(w, "Error saving file", http.StatusInternalServerError)
+		return 
 	}
 
+	defer dst.Close()
+
+	if _, err := dst.Write(fileBytes); err != nil { 
+	
+		http.Error(w, "error saving file", http.StatusInternalServerError)
+		return 
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"jobId" : "1"})
 }
+
+
 
 func createFile(filename string) (*os.File, error) {
 
@@ -75,9 +77,8 @@ func createFile(filename string) (*os.File, error) {
 }
 
 func isValidFileType(file []byte) bool {
-
 	fileType := http.DetectContentType(file)
-	return strings.HasSuffix(fileType, ".pdf/")
+	return strings.HasPrefix(fileType, "application/pdf")
 }
 
 func main() {
