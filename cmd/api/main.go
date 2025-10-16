@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"encoding/json"
+	"job-matcher/internal/database"
 )
 
 func fileUploadHandler(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +84,16 @@ func isValidFileType(file []byte) bool {
 }
 
 func main() {
+
+	ctx := context.Background()
+	dbStore , err := database.New(ctx, os.Getenv("DATABASE_URL"))
+
+	if err != nil { 
+	panic(err)
+	}
+
+	defer dbStore.Close()
+	
 	http.HandleFunc("/upload", fileUploadHandler)
 	fmt.Println("Starting server on port 8080:")
 	log.Fatal(http.ListenAndServe(":8080", nil))

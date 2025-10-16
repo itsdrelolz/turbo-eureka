@@ -40,3 +40,5 @@ func New(ctx context.Context, connString string) (*Store, error) {
 func (s *Store) Close() { 
 	s.Pool.Close() 
 }
+
+
