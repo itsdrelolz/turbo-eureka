@@ -1,22 +1,38 @@
 package objectstore
 
-
-import ( 
+import (
 	"context"
-	"time"
-	"log"
 	"errors"
+	"fmt"
+	"log"
 	"os"
-	"github.com/aws/smithy-go"
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 )
 
 
 
 type S3Bucket struct { 
 	S3Client *s3.Client
+}
+
+
+func New(ctx context.Context, bucketName string) (*S3Bucket, error) { 
+	
+	if bucketName == "" { 
+		
+		return nil, fmt.Errorf("must provide a bucketname")
+	}
+
+	bucket, err := 
+
+
+
+
 }
 
 

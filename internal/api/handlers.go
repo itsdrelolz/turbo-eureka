@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"job-matcher/internal/objectstore/s3"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	
 )
 
 
@@ -17,11 +19,19 @@ import (
 // add job to redis 
 
 
+type handler struct { 
+	db *pgxpool.Pool
+	s3 *s3.Client
+	redis *rClient
+	s3Bucket string 
+}
 
-func handleUploadResum(w http.ResponseWriter, r *http.Request) {
+
+func handleUploadResume(w http.ResponseWriter, r *http.Request) {
 	// limit file to size of 10MB
 	
 	r.Body = http.MaxBytesReader(w, r.Body, 10 << 20)
+
 
 
 
@@ -32,20 +42,6 @@ func handleUploadResum(w http.ResponseWriter, r *http.Request) {
 
 
 
-func createFile(filename string) (*os.File, error) {
-
-	if _, err := os.Stat("uploads"); os.IsNotExist(err) {
-		os.Mkdir("uploads", 0755)
-	}
-
-	dst, err := os.Create(filepath.Join("uploads", filename))
-
-	if err != nil {
-		return nil, err
-	}
-
-	return dst, nil
-}
 
 func isValidFileType(file []byte) bool {
 	fileType := http.DetectContentType(file)
