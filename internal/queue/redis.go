@@ -33,6 +33,6 @@ func New(ctx context.Context, connectionString string) (*RedisClient, error) {
 }
 
 
-func (c *RedisClient) Close() error  { 
+func (c *RedisClient) lose() error  { 
  	return c.Client.Close()
 }

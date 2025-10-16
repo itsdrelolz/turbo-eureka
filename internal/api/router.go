@@ -1,17 +1,23 @@
 package api
 
 import (
+	"job-matcher/internal/objectstore"
 	"net/http"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
 
 
 
-func newRouter(db *pgxpool.Pool, queue *redis.Client, s3Client *s3.Client, bucketName string) http.Handler { 
 
-	h := &hander{ 
+
+func newRouter(db *pgxpool.Pool, queue *redis.Client, fs *objectstore.FileStore, bucketName string) http.Handler { 
+
+	h := &handler{ 
 		db: db, 
-		queue: queue, 
-		s3: s3Client, 
+		redis: queue, 
+		store: fs, 
 		s3Bucket: bucketName,
 	}
 

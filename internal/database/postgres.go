@@ -14,6 +14,8 @@ type Store struct {
 }
 
 
+
+
 func New(ctx context.Context, connString string) (*Store, error) { 
 	
 	if connString == "" { 
@@ -39,6 +41,14 @@ func New(ctx context.Context, connString string) (*Store, error) {
 
 func (s *Store) Close() { 
 	s.Pool.Close() 
+}
+
+
+func (s *Store)  CreateJob(ctx context.Context, fileUrl string) (string, error) { 
+
+	
+	return "", nil
+
 }
 
 
