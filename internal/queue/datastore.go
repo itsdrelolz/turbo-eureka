@@ -19,10 +19,12 @@ func New(ctx context.Context, connectionString []string) (*ValkeyClient, error) 
     if err != nil {
         return nil, fmt.Errorf("unable to create Valkey client: %w", err)
     }
-
-
-
-
+    
+    if err := client.Do(ctx, client.B().Ping().Build()).Error(); err != nil {
+        client.Close() // Clean up the client if ping fails
+        return nil, fmt.Errorf("unable to ping Valkey: %w", err)
+    }
+    
     return &ValkeyClient{Client: client}, nil
 }
 
@@ -32,8 +34,8 @@ func New(ctx context.Context, connectionString []string) (*ValkeyClient, error) 
 
 
 
-func (v *ValkeyClient) Close() error {
-	return v.Client.Close()
+func (v *ValkeyClient) Close()  {
+	 v.Client.Close()
 }
 
 

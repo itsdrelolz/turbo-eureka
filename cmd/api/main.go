@@ -21,7 +21,7 @@ func main() {
 	}
 	defer dbStore.Close()
 
-	redisClient, err := queue.New(ctx, os.Getenv("REDIS_URL"))
+	redisClient, err := queue.New(ctx, []string{os.Getenv("REDIS_URL")})
 
 	if err != nil {
 		panic(err)
