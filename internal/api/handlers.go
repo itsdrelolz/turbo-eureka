@@ -81,6 +81,9 @@ func (h *handler) handleUploadResume(w http.ResponseWriter, r *http.Request) {
 		return 
 	}
 
+
+
+
 	// TODO: 
 	// Now add this jobid to the redis queue 
 		

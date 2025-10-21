@@ -1,0 +1,63 @@
+package queue
+
+import (
+	"context"
+	"fmt"
+	"job-matcher/internal/database"
+
+	"github.com/valkey-io/valkey-go"
+)
+
+type ValkeyClient struct {
+	Client valkey.Client
+}
+
+func New(ctx context.Context, connectionString []string) (*ValkeyClient, error) {
+    client, err := valkey.NewClient(valkey.ClientOption{
+        InitAddress: connectionString,
+    })
+    if err != nil {
+        return nil, fmt.Errorf("unable to create Valkey client: %w", err)
+    }
+
+
+
+
+    return &ValkeyClient{Client: client}, nil
+}
+
+
+
+
+
+
+
+func (v *ValkeyClient) Close() error {
+	return v.Client.Close()
+}
+
+
+
+// This method should insert a job, and then update the job as pending in the postgres db 
+func (v *ValkeyClient) InsertJob(ctx context.Context, jobID string) error { 
+
+	
+	jobStatus := database.Pending
+
+
+
+
+
+	if jobID == "" { 
+		return fmt.Errorf("Job Id not found")
+	}
+
+
+
+	
+
+
+	return nil
+
+
+}

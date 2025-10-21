@@ -19,7 +19,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
 	defer dbStore.Close()
 
 	redisClient, err := queue.New(ctx, os.Getenv("REDIS_URL"))
@@ -27,6 +26,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer redisClient.Close()
 
 	s3Conf := objectstore.S3Config{
 		EndpointURL: os.Getenv("S3_ENDPOINT_URL"),
@@ -37,6 +37,7 @@ func main() {
 
 	// 2. Create the FileStore
 	fileStore, err := objectstore.NewFileStore(ctx, s3Conf)
+
 	if err != nil {
 		log.Fatalf("Could not create S3 filestore: %v", err)
 	}
@@ -48,7 +49,7 @@ func main() {
 
 	log.Println("S3 FileStore initialized")
 
-	router := api.NewRouter(dbStore.Pool, redisClient.Client, fileStore, s3Bucket)
+	router := api.NewRouter(dbStore, redisClient.Client, fileStore, s3Bucket)
 
 	http.ListenAndServe("8080", router)
 }
