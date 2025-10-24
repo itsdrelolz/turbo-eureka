@@ -2,17 +2,17 @@ package api
 
 import (
 	"job-matcher/internal/objectstore"
-	"net/http"	
-	"github.com/redis/go-redis/v9"
+	"net/http"
 	"job-matcher/internal/database"
+	"job-matcher/internal/queue"
 )
 
 
-func NewRouter(db *database.Store, queue *redis.Client, fs *objectstore.FileStore, bucketName string) http.Handler {
+func NewRouter(db *database.Store, queue *queue.ValkeyClient, fs *objectstore.FileStore, bucketName string) http.Handler {
 
 	h := &handler{
 		db:       db,
-		redis:    queue,
+		queue:    queue,
 		store:    fs,
 		s3Bucket: bucketName,
 	}

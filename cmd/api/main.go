@@ -21,12 +21,13 @@ func main() {
 	}
 	defer dbStore.Close()
 
-	redisClient, err := queue.New(ctx, []string{os.Getenv("REDIS_URL")})
+	valkeyClient, err := queue.New(ctx, []string{os.Getenv("VALKEY_URL")})
 
 	if err != nil {
 		panic(err)
 	}
-	defer redisClient.Close()
+
+	defer valkeyClient.Close()
 
 	s3Conf := objectstore.S3Config{
 		EndpointURL: os.Getenv("S3_ENDPOINT_URL"),
@@ -49,7 +50,7 @@ func main() {
 
 	log.Println("S3 FileStore initialized")
 
-	router := api.NewRouter(dbStore, redisClient.Client, fileStore, s3Bucket)
+	router := api.NewRouter(dbStore, valkeyClient, fileStore, s3Bucket)
 
 	http.ListenAndServe("8080", router)
 }

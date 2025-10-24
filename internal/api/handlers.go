@@ -1,16 +1,17 @@
 package api
 
 import (
+	"log"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"job-matcher/internal/objectstore"
 	"net/http"
 	"path/filepath"
-	"job-matcher/internal/database"	
+	"job-matcher/internal/database"
+	"job-matcher/internal/queue"
 )
 
 // TODO
@@ -21,7 +22,7 @@ import (
 
 type handler struct {
 	db       *database.Store
-	redis    *redis.Client
+	queue    *queue.ValkeyClient
 	store    *objectstore.FileStore
 	s3Bucket string
 }
@@ -47,6 +48,7 @@ func (h *handler) handleUploadResume(w http.ResponseWriter, r *http.Request) {
 	uniqueFileName := fmt.Sprintf("%s%s", uuid.New().String(), filepath.Ext(fileHeader.Filename))
 
 	output, err := h.store.Upload(r.Context(), file, h.s3Bucket, uniqueFileName, "application/pdf")
+
 	if err != nil {
 
 		var mu manager.MultiUploadFailure
@@ -60,12 +62,7 @@ func (h *handler) handleUploadResume(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, "Failed to upload file.", http.StatusInternalServerError)
 		return
-	}
-
-	// TODO
-	// This section shoulw get the file location from s3, and then insert it into the postgresdb as a job, with the status 'queued' .
-	// it then gets the jobid back and adds this job to the redis queue for workers to handle
-	// finally it should return to the user the jobid so they can check its status
+	}	
 	fileURL := output.Location
 	
 	if fileURL == "" { 
@@ -81,13 +78,21 @@ func (h *handler) handleUploadResume(w http.ResponseWriter, r *http.Request) {
 		return 
 	}
 
+	if err != nil {
+    	http.Error(w, "Failed to insert job into database", http.StatusInternalServerError)
+    	return
+	}
 
+	
+	err = h.queue.InsertJob(r.Context(), jobID)
 
-
-	// TODO: 
-	// Now add this jobid to the redis queue 
+	if err != nil { 	
+		http.Error(w, "Failed to insert job into the worker pool", http.StatusInternalServerError)
+		return 
+	}
 		
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	log.Printf("Job %s queued successfully at %s", jobID, fileURL)
 	json.NewEncoder(w).Encode(map[string]string{"jobId": jobID})
 }

@@ -3,7 +3,6 @@ package queue
 import (
 	"context"
 	"fmt"
-	"job-matcher/internal/database"
 
 	"github.com/valkey-io/valkey-go"
 )
@@ -44,22 +43,21 @@ func (v *ValkeyClient) Close()  {
 func (v *ValkeyClient) InsertJob(ctx context.Context, jobID string) error { 
 
 	
-	jobStatus := database.Pending
-
-
-
-
-
 	if jobID == "" { 
 		return fmt.Errorf("Job Id not found")
 	}
 
-
-
 	
-
-
+	cmd := v.Client.B().Lpush().
+        Key("job-queue").
+        Element(jobID).
+	Build()
+	
+	if _, err := v.Client.Do(ctx, cmd).AsInt64(); err != nil {
+       		return fmt.Errorf("unable to add job (%s) to the queue: %w", jobID, err)
+    	}
+	
 	return nil
-
-
 }
+
+
