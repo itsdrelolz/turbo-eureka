@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"job-matcher/internal/database"
-	"job-matcher/internal/objectstore"
-	"job-matcher/internal/queue"
+	"job-matcher/internal/postgresdb"
+	"job-matcher/internal/s3"
+	"job-matcher/internal/valkeydb"
 	"log"
 	"net/http"
 	"os"
@@ -14,20 +14,20 @@ import (
 func main() {
 
 	ctx := context.Background()
-	dbStore, err := database.New(ctx, os.Getenv("DATABASE_URL"))
+	postgresDB, err := postgresdb.New(ctx, os.Getenv("DATABASE_URL"))
 
 	if err != nil {
 		panic(err)
 	}
-	defer dbStore.Close()
+	defer postgresDB.Close()
 
-	valkeyClient, err := queue.New(ctx, []string{os.Getenv("VALKEY_URL")})
+	valkeyQueue, err := valkeydb.New(ctx, []string{os.Getenv("VALKEY_URL")})
 
 	if err != nil {
 		panic(err)
 	}
 
-	defer valkeyClient.Close()
+	defer valkeyQueue.Close()
 
 	s3Conf := objectstore.S3Config{
 		EndpointURL: os.Getenv("S3_ENDPOINT_URL"),
@@ -37,20 +37,22 @@ func main() {
 	}
 
 	// 2. Create the FileStore
-	fileStore, err := objectstore.NewFileStore(ctx, s3Conf)
+	s3Store, err := objectstore.NewFileStore(ctx, s3Conf)
 
 	if err != nil {
 		log.Fatalf("Could not create S3 filestore: %v", err)
 	}
 
-	s3Bucket := os.Getenv("S3_BUCKET_NAME")
-	if s3Bucket == "" {
+	bucketName := os.Getenv("S3_BUCKET_NAME")
+	if bucketName == "" {
 		log.Fatal("S3_BUCKET_NAME is not set")
 	}
 
 	log.Println("S3 FileStore initialized")
+	
+	apiHandler := api.NewAPIHandler(postgresDB, valkeyQueue, s3Store, bucketName)
 
-	router := api.NewRouter(dbStore, valkeyClient, fileStore, s3Bucket)
+	router := api.NewRouter(apiHandler)
 
 	http.ListenAndServe("8080", router)
 }

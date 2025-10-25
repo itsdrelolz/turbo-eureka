@@ -10,7 +10,7 @@ import (
 	"job-matcher/internal/objectstore"
 	"net/http"
 	"path/filepath"
-	"job-matcher/internal/database"
+	"job-matcher/internal/storage"
 	"job-matcher/internal/queue"
 )
 
@@ -20,14 +20,25 @@ import (
 // get jobid back from postgres
 // add job to redis
 
-type handler struct {
-	db       *database.Store
-	queue    *queue.ValkeyClient
-	store    *objectstore.FileStore
+type APIHandler struct {
+	db       storage.JobStore
+	queue    queue.JobQueuer
+	store    objectstore.FileStorer
 	s3Bucket string
 }
 
-func (h *handler) handleUploadResume(w http.ResponseWriter, r *http.Request) {
+
+func NewAPIHandler(db storage.JobStore, queue queue.JobQueuer, store objectstore.FileStorer, s3Bucket string) *APIHandler { 	
+	return &APIHandler{
+	db: db,
+	queue: queue,
+	store: store, 
+	s3Bucket: s3Bucket,
+	}
+
+}
+
+func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) {
 
 	const MAX_UPLOAD_SIZE = 5 << 20 // 5 MB
 

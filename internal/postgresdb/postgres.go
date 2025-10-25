@@ -1,21 +1,14 @@
-package database
+package postgresdb
 
 import (
 	"context"
 	"fmt"
 	// pool required in order to handle concurrent access
 	"github.com/jackc/pgx/v5/pgxpool"
+	"job-matcher/internal/storage"
 )
 
-type JobStatus int
 
-
-const (
-	Pending JobStatus = iota 
-	Queued             
-	Failed             
-	Completed          
-)
 
 type Store struct {
 	Pool *pgxpool.Pool
@@ -48,7 +41,7 @@ func (s *Store) Close() {
 func (s *Store) InsertJobAndGetID(ctx context.Context, fileUrl string) (string, error) {
 	
 	var newId string 
-	jobStatus := Queued
+	jobStatus := storage.Queued
 
 	sql := `
 		INSERT into jobs (file_url, job_status)
@@ -72,16 +65,46 @@ func (s *Store) InsertJobAndGetID(ctx context.Context, fileUrl string) (string, 
 }
 
 
+func (s *Store) GetJobByID(ctx context.Context, jobID string) (storage.Job, error) { 
+	
+	var retrievedJob storage.Job
+	
+	sql := `
+        SELECT id, job_status, file_url, created_at
+        FROM jobs
+        WHERE id = $1
+        `
 
-func (js JobStatus) String() string {
+
+
+	err := s.Pool.QueryRow(
+		ctx,
+		sql,
+		jobID,
+	).Scan(&retrievedJob.ID, &retrievedJob.JobStatus, &retrievedJob.FileUrl, &retrievedJob.CreatedAt)
+
+	if err != nil { 
+		return storage.Job{}, fmt.Errorf("Failed to retrieve job with error: %w", err)
+	}
+
+
+
+
+	return retrievedJob, nil 
+
+	
+}
+
+
+func (s *Store) String(js storage.JobStatus) string {
 	switch js {
-	case Pending:
+	case storage.Pending:
 		return "pending"
-	case Queued:
+	case storage.Queued:
 		return "queued"
-	case Failed:
+	case storage.Failed:
 		return "failed"
-	case Completed:
+	case storage.Completed:
 		return "completed"
 	default:
 		return fmt.Sprintf("JobStatus(%d)", js)
