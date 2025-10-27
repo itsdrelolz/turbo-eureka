@@ -84,26 +84,35 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 
 	jobID, err := h.db.InsertJobAndGetID(r.Context(), fileURL)	
 	
-	if jobID == "" {
+	if !jobID.Valid {
 		http.Error(w, "Unable to find job status", http.StatusInternalServerError)
 		return 
 	}
+
 
 	if err != nil {
     	http.Error(w, "Failed to insert job into database", http.StatusInternalServerError)
     	return
 	}
+	if !jobID.Valid {
+    http.Error(w, "Failed to create a valid job ID", http.StatusInternalServerError)
+    return
+	}
 
+	jobIDString := jobID.UUID.String()
 	
-	err = h.queue.InsertJob(r.Context(), jobID)
+
+	err = h.queue.InsertJob(r.Context(), jobIDString)
 
 	if err != nil { 	
 		http.Error(w, "Failed to insert job into the worker pool", http.StatusInternalServerError)
 		return 
 	}
+
+
 		
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	log.Printf("Job %s queued successfully at %s", jobID, fileURL)
-	json.NewEncoder(w).Encode(map[string]string{"jobId": jobID})
+	log.Printf("Job %s queued successfully at %s", jobIDString, fileURL)
+	json.NewEncoder(w).Encode(map[string]string{"jobId": jobIDString})
 }

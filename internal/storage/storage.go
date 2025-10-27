@@ -4,6 +4,7 @@ package storage
 import ( 
 	"context" 
 	"time"
+	"github.com/google/uuid"
 ) 
 
 type JobStatus int
@@ -18,15 +19,28 @@ const (
 
 
 type Job struct { 	
-	ID string 
+	ID uuid.NullUUID 
 	JobStatus JobStatus
 	FileUrl string 
 	CreatedAt time.Time 
 }
 
 type JobStore interface { 	
-	InsertJobAndGetID(ctx context.Context, fileUrl string) (string, error) 
-	GetJobByID(ctx context.Context, jobID string) (Job, error)
-	String(js JobStatus) string 
+	InsertJobAndGetID(ctx context.Context, fileUrl string) (uuid.NullUUID, error) 
+	GetJobByID(ctx context.Context, jobID uuid.NullUUID) (Job, error)
 }
 
+func (s JobStatus) String() string {
+    switch s {
+    case Queued:
+        return "queued"
+    case Pending:
+        return "pending"
+    case Completed:
+        return "completed"
+    case Failed:
+        return "failed"
+    default:
+        return "unknown"
+    }
+}

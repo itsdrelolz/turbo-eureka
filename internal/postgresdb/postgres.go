@@ -6,6 +6,7 @@ import (
 	// pool required in order to handle concurrent access
 	"github.com/jackc/pgx/v5/pgxpool"
 	"job-matcher/internal/storage"
+	"github.com/google/uuid"
 )
 
 
@@ -38,9 +39,9 @@ func (s *Store) Close() {
 	s.Pool.Close()
 }
 
-func (s *Store) InsertJobAndGetID(ctx context.Context, fileUrl string) (string, error) {
+func (s *Store) InsertJobAndGetID(ctx context.Context, fileUrl string) (uuid.NullUUID, error) {
 	
-	var newId string 
+	var newId uuid.NullUUID
 	jobStatus := storage.Queued
 
 	sql := `
@@ -53,19 +54,19 @@ func (s *Store) InsertJobAndGetID(ctx context.Context, fileUrl string) (string, 
 		ctx, 
 		sql,
 		fileUrl,
-		jobStatus,
+		jobStatus.String(),
 		).Scan(&newId)
 
 
 	if err != nil {
-		return "", fmt.Errorf("Query row failed with error: %w", err)
+		return uuid.NullUUID{}, fmt.Errorf("Query row failed with error: %w", err)
 	}
 	return newId, nil
 
 }
 
 
-func (s *Store) GetJobByID(ctx context.Context, jobID string) (storage.Job, error) { 
+func (s *Store) GetJobByID(ctx context.Context, jobID uuid.NullUUID) (storage.Job, error) { 
 	
 	var retrievedJob storage.Job
 	

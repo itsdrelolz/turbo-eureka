@@ -1,0 +1,77 @@
+name: Go CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      docker:
+        image: docker:24.0.5-dind
+        privileged: true
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.25.3'  # or your version
+
+    # --------------------
+    # 1. FORMAT CHECK
+    # --------------------
+    - name: Check formatting
+      run: |
+        if [ -n "$(gofmt -l .)" ]; then
+          echo "Code is not formatted. Run 'gofmt -w .'"
+          exit 1
+        fi
+
+    # --------------------
+    # 2. LINTING
+    # --------------------
+    - name: Install golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+
+    - name: Run linter
+      run: golangci-lint run ./...
+
+    # --------------------
+    # 3. START DOCKER COMPOSE FOR INTEGRATION TESTS
+    # --------------------
+    - name: Set up Docker Compose
+      run: |
+        docker compose -f docker-compose.test.yaml up -d
+        echo "Waiting for services to be ready..."
+        sleep 10
+
+    # --------------------
+    # 4. RUN TESTS
+    # --------------------
+    - name: Run tests (including integration)
+      env:
+        DB_TEST_URL: postgres://postgres:password@localhost:5433/testdb?sslmode=disable
+        INTEGRATION_TEST: true   # optional flag for conditional build tags
+      run: go test -v ./...
+
+    # --------------------
+    # 5. BUILD APP
+    # --------------------
+    - name: Build
+      run: go build -v ./...
+
+    # --------------------
+    # 6. CLEANUP
+    # --------------------
+    - name: Shutdown Docker Compose
+      if: always()
+      run: docker compose -f docker-compose.test.yaml down
+
