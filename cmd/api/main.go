@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
+	"job-matcher/internal/api"
 	"job-matcher/internal/postgresdb"
 	"job-matcher/internal/s3"
 	"job-matcher/internal/valkeydb"
 	"log"
 	"net/http"
 	"os"
-	"job-matcher/internal/api"
 )
 
 func main() {
@@ -49,7 +49,7 @@ func main() {
 	}
 
 	log.Println("S3 FileStore initialized")
-	
+
 	apiHandler := api.NewAPIHandler(postgresDB, valkeyQueue, s3Store, bucketName)
 
 	router := api.NewRouter(apiHandler)

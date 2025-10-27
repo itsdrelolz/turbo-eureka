@@ -18,7 +18,7 @@ import (
 func TestHandleUploadResume_Success(t *testing.T) {
 
 	testUUID := uuid.New()
-	
+
 	// The database returns this struct
 	expectedDBResult := uuid.NullUUID{
 		UUID:  testUUID,
@@ -57,10 +57,9 @@ func TestHandleUploadResume_Success(t *testing.T) {
 
 	var responseBody map[string]string
 	json.Unmarshal(rr.Body.Bytes(), &responseBody)
-	
+
 	assert.Equal(t, expectedJobID, responseBody["jobId"])
 	mockDB.AssertExpectations(t)
 	mockQueue.AssertExpectations(t)
 	mockStore.AssertExpectations(t)
 }
-

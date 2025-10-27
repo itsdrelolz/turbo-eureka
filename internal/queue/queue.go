@@ -1,12 +1,9 @@
-package queue 
-
-
+package queue
 
 import (
 	"context"
 )
 
-
-type JobQueuer interface { 	
-	InsertJob(ctx context.Context,  jobID string) error 
+type JobQueuer interface {
+	InsertJob(ctx context.Context, jobID string) error
 }

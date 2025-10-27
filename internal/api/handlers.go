@@ -1,17 +1,17 @@
 package api
 
 import (
-	"log"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/google/uuid"
 	"job-matcher/internal/objectstore"
+	"job-matcher/internal/queue"
+	"job-matcher/internal/storage"
+	"log"
 	"net/http"
 	"path/filepath"
-	"job-matcher/internal/storage"
-	"job-matcher/internal/queue"
 )
 
 // TODO
@@ -27,13 +27,12 @@ type APIHandler struct {
 	s3Bucket string
 }
 
-
-func NewAPIHandler(db storage.JobStore, queue queue.JobQueuer, store objectstore.FileStorer, s3Bucket string) *APIHandler { 	
+func NewAPIHandler(db storage.JobStore, queue queue.JobQueuer, store objectstore.FileStorer, s3Bucket string) *APIHandler {
 	return &APIHandler{
-	db: db,
-	queue: queue,
-	store: store, 
-	s3Bucket: s3Bucket,
+		db:       db,
+		queue:    queue,
+		store:    store,
+		s3Bucket: s3Bucket,
 	}
 
 }
@@ -73,44 +72,39 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 		}
 		http.Error(w, "Failed to upload file.", http.StatusInternalServerError)
 		return
-	}	
+	}
 	fileURL := output.Location
-	
-	if fileURL == "" { 
+
+	if fileURL == "" {
 		http.Error(w, "The file location was not successfully retrieved", http.StatusInternalServerError)
-		return 	
+		return
 	}
 
+	jobID, err := h.db.InsertJobAndGetID(r.Context(), fileURL)
 
-	jobID, err := h.db.InsertJobAndGetID(r.Context(), fileURL)	
-	
 	if !jobID.Valid {
 		http.Error(w, "Unable to find job status", http.StatusInternalServerError)
-		return 
+		return
 	}
-
 
 	if err != nil {
-    	http.Error(w, "Failed to insert job into database", http.StatusInternalServerError)
-    	return
+		http.Error(w, "Failed to insert job into database", http.StatusInternalServerError)
+		return
 	}
 	if !jobID.Valid {
-    http.Error(w, "Failed to create a valid job ID", http.StatusInternalServerError)
-    return
+		http.Error(w, "Failed to create a valid job ID", http.StatusInternalServerError)
+		return
 	}
 
 	jobIDString := jobID.UUID.String()
-	
 
 	err = h.queue.InsertJob(r.Context(), jobIDString)
 
-	if err != nil { 	
+	if err != nil {
 		http.Error(w, "Failed to insert job into the worker pool", http.StatusInternalServerError)
-		return 
+		return
 	}
 
-
-		
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	log.Printf("Job %s queued successfully at %s", jobIDString, fileURL)

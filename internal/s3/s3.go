@@ -63,5 +63,3 @@ func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, co
 
 	return output, nil
 }
-
-
