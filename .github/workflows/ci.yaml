@@ -12,7 +12,6 @@ jobs:
     services:
       docker:
         image: docker:24.0.5-dind
-        privileged: true
         
     steps:
     - name: Checkout code
