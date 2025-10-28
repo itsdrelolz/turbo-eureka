@@ -27,7 +27,6 @@ func New(ctx context.Context, address string, password string) (*ValkeyClient, e
 	return &ValkeyClient{Client: client}, nil
 }
 
-
 func (v *ValkeyClient) Close() {
 	v.Client.Close()
 }

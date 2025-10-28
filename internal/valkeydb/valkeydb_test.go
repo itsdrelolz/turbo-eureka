@@ -16,7 +16,6 @@ func setUpTestDB(t *testing.T) *valkeydb.ValkeyClient {
 		t.Skip("VALKEY_TEST_URL not set, skipping integration test")
 	}
 
-
 	valkeypass := os.Getenv("VALKEY_TEST_PASSWORD")
 	if valkeypass == "" {
 		t.Skip("VALKEY_PASSWORD not set, skipping integration test")
