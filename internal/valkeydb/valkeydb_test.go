@@ -33,36 +33,34 @@ func setUpTestDB(t *testing.T) *valkeydb.ValkeyClient {
 }
 
 func TestInsertJobSuccess(t *testing.T) {
-    valkeyDB := setUpTestDB(t)
-    ctx := context.Background()
-    jobID := "test_job_id"
+	valkeyDB := setUpTestDB(t)
+	ctx := context.Background()
+	jobID := "test_job_id"
 
-    err := valkeyDB.InsertJob(ctx, jobID)
-    if err != nil {
-        t.Fatalf("Failed to insert job: %v", err)
-    }
-
+	err := valkeyDB.InsertJob(ctx, jobID)
+	if err != nil {
+		t.Fatalf("Failed to insert job: %v", err)
+	}
 
 	// USE Blocking Right pop to simulate workers pulling from queue
-    brpopCmd := valkeyDB.Client.B().Brpop().
-        Key("job-queue").
-        Timeout(0).
-        Build()
+	brpopCmd := valkeyDB.Client.B().Brpop().
+		Key("job-queue").
+		Timeout(0).
+		Build()
 
-    res := valkeyDB.Client.Do(ctx, brpopCmd)
+	res := valkeyDB.Client.Do(ctx, brpopCmd)
 
-    arr, err := res.AsStrSlice()
-    if err != nil {
-        t.Fatalf("Failed to parse BRPOP response: %v", err)
-    }
-    if len(arr) != 2 {
-        t.Fatalf("Expected 2 elements in BRPOP response, got %d", len(arr))
-    }
+	arr, err := res.AsStrSlice()
+	if err != nil {
+		t.Fatalf("Failed to parse BRPOP response: %v", err)
+	}
+	if len(arr) != 2 {
+		t.Fatalf("Expected 2 elements in BRPOP response, got %d", len(arr))
+	}
 
-    poppedJobID := arr[1]
+	poppedJobID := arr[1]
 
-    if poppedJobID != jobID {
-        t.Fatalf("Expected job ID %s, got %s", jobID, poppedJobID)
-    }
+	if poppedJobID != jobID {
+		t.Fatalf("Expected job ID %s, got %s", jobID, poppedJobID)
+	}
 }
-
