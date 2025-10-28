@@ -29,7 +29,7 @@ func main() {
 
 	defer valkeyQueue.Close()
 
-	s3Conf := objectstore.S3Config{
+	s3Conf := s3.S3Config{
 		EndpointURL: os.Getenv("S3_ENDPOINT_URL"),
 		Region:      os.Getenv("S3_REGION"),
 		AccessKey:   os.Getenv("S3_ACCESS_KEY"),
@@ -37,7 +37,7 @@ func main() {
 	}
 
 	// 2. Create the FileStore
-	s3Store, err := objectstore.NewFileStore(ctx, s3Conf)
+	s3Store, err := s3.NewFileStore(ctx, s3Conf)
 
 	if err != nil {
 		log.Fatalf("Could not create S3 filestore: %v", err)
