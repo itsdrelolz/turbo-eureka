@@ -39,7 +39,7 @@ func setUpTestDB(t *testing.T) *postgresdb.Store {
 	return db
 }
 
-func TestInsertJobAndGetID_Success(t *testing.T) {
+func TestInsertJobAndGetIDSuccess(t *testing.T) {
 
 	postgresDB := setUpTestDB(t)
 

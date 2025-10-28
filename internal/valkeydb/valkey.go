@@ -10,21 +10,23 @@ type ValkeyClient struct {
 	Client valkey.Client
 }
 
-func New(ctx context.Context, connectionString []string) (*ValkeyClient, error) {
+func New(ctx context.Context, address string, password string) (*ValkeyClient, error) {
 	client, err := valkey.NewClient(valkey.ClientOption{
-		InitAddress: connectionString,
+		InitAddress: []string{address},
+		Password:    password,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to create Valkey client: %w", err)
 	}
 
 	if err := client.Do(ctx, client.B().Ping().Build()).Error(); err != nil {
-		client.Close() // Clean up the client if ping fails
+		client.Close()
 		return nil, fmt.Errorf("unable to ping Valkey: %w", err)
 	}
 
 	return &ValkeyClient{Client: client}, nil
 }
+
 
 func (v *ValkeyClient) Close() {
 	v.Client.Close()

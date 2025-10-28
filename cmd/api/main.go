@@ -21,7 +21,7 @@ func main() {
 	}
 	defer postgresDB.Close()
 
-	valkeyQueue, err := valkeydb.New(ctx, []string{os.Getenv("VALKEY_URL")})
+	valkeyQueue, err := valkeydb.New(ctx, os.Getenv("VALKEY_URL"), os.Getenv("VALKEY_PASSWORD"))
 
 	if err != nil {
 		panic(err)

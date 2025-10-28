@@ -38,6 +38,8 @@ jobs:
     - name: Run tests (including integration)
       env:
         DB_TEST_URL: postgres://postgres:password@localhost:5433/testdb?sslmode=disable
+        VALKEY_TEST_URL: localhost:6380
+        VALKEY_TEST_PASSWORD: mysecretpassword
         INTEGRATION_TEST: true   # optional flag for conditional build tags
       run: go test -v ./...
 
