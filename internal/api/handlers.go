@@ -57,30 +57,15 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 
 	uniqueFileName := fmt.Sprintf("%s%s", uuid.New().String(), filepath.Ext(fileHeader.Filename))
 
-	output, err := h.store.Upload(r.Context(), file, h.s3Bucket, uniqueFileName, "application/pdf")
+	outputURL, err := h.store.Upload(r.Context(), file, h.s3Bucket, uniqueFileName, "application/pdf")
 
-	if err != nil {
-
-		var mu manager.MultiUploadFailure
-		if errors.As(err, &mu) {
-			// Process error and its associated uploadID
-			fmt.Println("Error:", mu)
-			_ = mu.UploadID() // retrieve the associated UploadID
-		} else {
-			// Process error generically
-			fmt.Println("Error:", err.Error())
-		}
-		http.Error(w, "Failed to upload file.", http.StatusInternalServerError)
-		return
-	}
-	fileURL := output.Location
-
-	if fileURL == "" {
-		http.Error(w, "The file location was not successfully retrieved", http.StatusInternalServerError)
-		return
+	if outputURL == "" {
+	log.Println("ERROR: S3 upload output returned empty location.") 
+    	http.Error(w, "Internal server error during file upload", http.StatusInternalServerError) 	
+	return 
 	}
 
-	jobID, err := h.db.InsertJobAndGetID(r.Context(), fileURL)
+	jobID, err := h.db.InsertJobAndGetID(r.Context(), outputURL)
 
 	if !jobID.Valid {
 		http.Error(w, "Unable to find job status", http.StatusInternalServerError)

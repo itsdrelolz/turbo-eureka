@@ -17,14 +17,14 @@ func main() {
 	postgresDB, err := postgresdb.New(ctx, os.Getenv("DATABASE_URL"))
 
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to initialize postgresdb: %v", err)
 	}
 	defer postgresDB.Close()
 
 	valkeyQueue, err := valkeydb.New(ctx, os.Getenv("VALKEY_URL"), os.Getenv("VALKEY_PASSWORD"))
 
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to initialize valkey: %v", err)
 	}
 
 	defer valkeyQueue.Close()

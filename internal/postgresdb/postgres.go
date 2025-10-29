@@ -37,10 +37,9 @@ func (s *Store) Close() {
 	s.Pool.Close()
 }
 
-func (s *Store) InsertJobAndGetID(ctx context.Context, fileUrl string) (uuid.NullUUID, error) {
+func (s *Store) InsertJobAndGetID(ctx context.Context, fileUrl string, jobStatus storage.JobStatus) (uuid.NullUUID, error) {
 
 	var newId uuid.NullUUID
-	jobStatus := storage.Queued
 
 	sql := `
 		INSERT into jobs (file_url, job_status)
@@ -83,6 +82,36 @@ func (s *Store) GetJobByID(ctx context.Context, jobID uuid.NullUUID) (storage.Jo
 	}
 
 	return retrievedJob, nil
+
+}
+
+
+func (s *Store) UpdateJobStatus(ctx context.Context, jobID uuid.NullUUID, jobStatus storage.JobStatus) error { 
+
+	var updatedJob storage.Job 
+
+	sql := `
+	UPDATE job
+	SET job_status = $1, 
+	WHERE id = $2
+	` 
+
+	err := s.Pool.QueryRow(
+		ctx, 
+		sql, 
+		jobStatus.String(),
+		jobID,
+		).Scan(&updatedJob.ID, &updatedJob.JobStatus, &updatedJob.FileUrl, updatedJob.CreatedAt)
+
+
+	if err != nil { 
+		return fmt.Errorf("Failed to update job with error: %w", err) 
+	}
+
+
+
+	return  nil
+
 
 }
 

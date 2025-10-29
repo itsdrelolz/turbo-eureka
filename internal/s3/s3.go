@@ -6,13 +6,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"io"
 )
 
 type FileStore struct {
-	Uploader *manager.Uploader
+	Client     *s3.Client
 }
 
 type S3Config struct {
@@ -42,24 +41,47 @@ func NewFileStore(ctx context.Context, conf S3Config) (*FileStore, error) {
 		o.UsePathStyle = true
 	})
 
-	uploader := manager.NewUploader(client)
 
-	return &FileStore{Uploader: uploader}, nil
+	return &FileStore{Client: client}, nil
 
 }
 
-func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, contentType string) (*manager.UploadOutput, error) {
+func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, contentType string) (string, error) {
 
-	output, err := fs.Uploader.Upload(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(key),
-		Body:        file,
+	_, err := fs.Client.PutObject(ctx,&s3.PutObjectInput{ 
+		Bucket: aws.String(bucket), 
+		Key: aws.String(key), 
+		Body: file, 
 		ContentType: aws.String(contentType),
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to upload file: %w", err)
+		return "", fmt.Errorf("failed to upload file: %w", err)
 	}
 
-	return output, nil
+	location := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", bucket, key)
+	return location, nil
+}
+
+func (fs *FileStore) Download(ctx context.Context, bucket, key string) ([]byte, error) { 
+
+
+	result, err := fs.Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket), 
+		Key: aws.String(key),
+	})
+
+	if err != nil { 
+		return nil, fmt.Errorf("failed to download file: %w", err) 
+	}
+	defer result.Body.Close()
+
+	body, err := io.ReadAll(result.Body)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to read object body from file: %w", err)
+	}
+
+	return body, nil
+
 }

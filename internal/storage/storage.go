@@ -25,6 +25,7 @@ type Job struct {
 type JobStore interface {
 	InsertJobAndGetID(ctx context.Context, fileUrl string) (uuid.NullUUID, error)
 	GetJobByID(ctx context.Context, jobID uuid.NullUUID) (Job, error)
+	UpdateJobStatus(ctx context.Context, jobID uuid.NullUUID, jobStatus JobStatus) error
 }
 
 func (s JobStatus) String() string {
