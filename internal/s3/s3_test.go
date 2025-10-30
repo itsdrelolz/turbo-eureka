@@ -68,7 +68,6 @@ func TestUploadSuccess(t *testing.T) {
 		t.Fatal("Expected non-nil upload output, got nil")
 	}
 
-
 	t.Logf("Successfully uploaded file to: %s", output)
 }
 

@@ -3,7 +3,6 @@ package objectstore
 import (
 	"context"
 	"io"
-
 )
 
 type FileStorer interface {

@@ -15,7 +15,7 @@ func (m *MockFileStorer) Upload(ctx context.Context, file io.Reader, bucket, key
 	args := m.Called(ctx, file, bucket, key, contentType)
 
 	if args.Get(0) == nil {
-		return "" , args.Error(1)
+		return "", args.Error(1)
 	}
 
 	return args.Get(0).(string), args.Error(1)

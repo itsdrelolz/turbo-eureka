@@ -37,9 +37,9 @@ func (s *Store) Close() {
 	s.Pool.Close()
 }
 
-func (s *Store) InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus storage.JobStatus) (uuid.NullUUID, error) {
+func (s *Store) InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus storage.JobStatus) (uuid.UUID, error) {
 
-	var newId uuid.NullUUID
+	var newId uuid.UUID
 
 	sql := `
 		INSERT into jobs (file_url, job_status)
@@ -55,13 +55,13 @@ func (s *Store) InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus
 	).Scan(&newId)
 
 	if err != nil {
-		return uuid.NullUUID{}, fmt.Errorf("Query row failed with error: %w", err)
+		return uuid.Nil, fmt.Errorf("Query row failed with error: %w", err)
 	}
 	return newId, nil
 
 }
 
-func (s *Store) JobByID(ctx context.Context, jobID uuid.NullUUID) (storage.Job, error) {
+func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (storage.Job, error) {
 
 	var retrievedJob storage.Job
 
@@ -85,28 +85,54 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.NullUUID) (storage.Job, 
 
 }
 
-func (s *Store) UpdateJobStatus(ctx context.Context, jobID uuid.NullUUID, jobStatus storage.JobStatus) error {
+func (s *Store) UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus storage.JobStatus) error {
 
-	var updatedJob storage.Job
 
 	sql := `
 	UPDATE job
-	SET job_status = $1, 
+	SET job_status = $1
 	WHERE id = $2
 	`
 
-	err := s.Pool.QueryRow(
+	_, err := s.Pool.Exec(
 		ctx,
 		sql,
 		jobStatus.String(),
 		jobID,
-	).Scan(&updatedJob.ID, &updatedJob.JobStatus, &updatedJob.FileUrl, updatedJob.CreatedAt)
+		)
 
 	if err != nil {
 		return fmt.Errorf("Failed to update job with error: %w", err)
 	}
 
 	return nil
+
+}
+
+func (s *Store) InsertEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeEmbedding []byte) error { 
+
+
+
+	sql := `
+		UPDATE jobs
+		SET embedding = $1
+		WHERE id = $2
+		`
+
+	_, err := s.Pool.Exec(
+		ctx,
+		sql,
+		jobID,
+		resumeEmbedding,
+		)
+
+
+	if err != nil {
+		return fmt.Errorf("Failed to insert embedding into job with error: %w", err)
+	}
+
+	return nil
+
 
 }
 

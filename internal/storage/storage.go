@@ -16,16 +16,17 @@ const (
 )
 
 type Job struct {
-	ID        uuid.NullUUID
+	ID        uuid.UUID
 	JobStatus JobStatus
 	FileUrl   string
 	CreatedAt time.Time
 }
 
 type JobStore interface {
-	InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus JobStatus) (uuid.NullUUID, error)
-	JobByID(ctx context.Context, jobID uuid.NullUUID) (Job, error)
-	UpdateJobStatus(ctx context.Context, jobID uuid.NullUUID, jobStatus JobStatus) error
+	InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus JobStatus) (uuid.UUID, error)
+	JobByID(ctx context.Context, jobID uuid.UUID) (Job, error)
+	UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus JobStatus) error
+	InsertEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeEmbedding []byte) error 
 }
 
 func (s JobStatus) String() string {

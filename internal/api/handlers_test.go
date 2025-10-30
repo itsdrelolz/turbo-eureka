@@ -3,7 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"job-matcher/mocks" 	
+	"job-matcher/mocks"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -19,7 +19,7 @@ func TestHandleUploadResume_Success(t *testing.T) {
 	testUUID := uuid.New()
 
 	// The database returns this struct
-	expectedDBResult := uuid.NullUUID{
+	expectedDBResult := uuid.UUID{
 		UUID:  testUUID,
 		Valid: true,
 	}

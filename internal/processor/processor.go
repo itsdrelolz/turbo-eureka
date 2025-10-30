@@ -12,11 +12,11 @@ import (
 
 type JobConsumer interface {
 	ConsumeJob(ctx context.Context) (string, error)
-	UpdateJobStatus(ctx context.Context, jobID uuid.NullUUID) (uuid.NullUUID, error)
+	UpdateJobStatus(ctx context.Context, jobID uuid.UUID) (uuid.UUID, error)
 }
 
 type JobUpdated interface {
-	UpdateJobStatus(ctx context.Context, jobID uuid.NullUUID) (uuid.NullUUID, error)
+	UpdateJobStatus(ctx context.Context, jobID uuid.UUID) (uuid.UUID, error)
 }
 
 type JobProcessor struct {
@@ -63,7 +63,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 
 	log.Printf("Processing given job for ID: %s", jobID)
 
-	job, err := p.db.JobByID(ctx, uuid.NullUUID{UUID: jobID, Valid: true})
+	job, err := p.db.JobByID(ctx, uuid.UUID(jobID))
 
 	if err != nil {
 		log.Printf("Error fetching job %s details: %v", jobID, err)
@@ -75,7 +75,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 
 	// UPDATED JOB STATUS
 
-	err = p.db.UpdateJobStatus(ctx, uuid.NullUUID{UUID: jobID, Valid: true}, storage.Pending)
+	err = p.db.UpdateJobStatus(ctx, uuid.UUID(jobID), storage.Pending)
 
 	if err != nil {
 		log.Printf("Failed updating status for job: %s details: %v", jobID, err)
@@ -96,7 +96,16 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 		log.Fatalf("Failed to extract resume text for job %s, details: %v", jobID, err)
 	}
 
-	log.Println(extractedText)
+	embeddings, err := p.gemini.Embed(ctx, extractedText)
+
+	if err != nil { 
+		log.Fatalf("Failed embedding for job %s, details: %v", jobID, err)
+	}
+
+	err = p.db.InsertEmbeddingWithID(ctx, jobID, embeddings)
 
 
+	if err != nil { 
+		log.Fatalf("Failed to insert embedding with job %s, details: %v", jobID, err)
+	}
 }
