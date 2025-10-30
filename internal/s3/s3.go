@@ -11,7 +11,7 @@ import (
 )
 
 type FileStore struct {
-	Client     *s3.Client
+	Client *s3.Client
 }
 
 type S3Config struct {
@@ -41,17 +41,16 @@ func NewFileStore(ctx context.Context, conf S3Config) (*FileStore, error) {
 		o.UsePathStyle = true
 	})
 
-
 	return &FileStore{Client: client}, nil
 
 }
 
 func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, contentType string) (string, error) {
 
-	_, err := fs.Client.PutObject(ctx,&s3.PutObjectInput{ 
-		Bucket: aws.String(bucket), 
-		Key: aws.String(key), 
-		Body: file, 
+	_, err := fs.Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(key),
+		Body:        file,
 		ContentType: aws.String(contentType),
 	})
 
@@ -63,16 +62,15 @@ func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, co
 	return location, nil
 }
 
-func (fs *FileStore) Download(ctx context.Context, bucket, key string) ([]byte, error) { 
-
+func (fs *FileStore) Download(ctx context.Context, bucket, key string) ([]byte, error) {
 
 	result, err := fs.Client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucket), 
-		Key: aws.String(key),
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
 	})
 
-	if err != nil { 
-		return nil, fmt.Errorf("failed to download file: %w", err) 
+	if err != nil {
+		return nil, fmt.Errorf("failed to download file: %w", err)
 	}
 	defer result.Body.Close()
 
@@ -83,5 +81,4 @@ func (fs *FileStore) Download(ctx context.Context, bucket, key string) ([]byte, 
 	}
 
 	return body, nil
-
 }

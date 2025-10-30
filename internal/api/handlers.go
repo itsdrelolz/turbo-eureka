@@ -60,9 +60,9 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 	outputURL, err := h.store.Upload(r.Context(), file, h.s3Bucket, uniqueFileName, "application/pdf")
 
 	if outputURL == "" {
-	log.Println("ERROR: S3 upload output returned empty location.") 
-    	http.Error(w, "Internal server error during file upload", http.StatusInternalServerError) 	
-	return 
+		log.Println("ERROR: S3 upload output returned empty location.")
+		http.Error(w, "Internal server error during file upload", http.StatusInternalServerError)
+		return
 	}
 
 	jobID, err := h.db.InsertJobAndGetID(r.Context(), outputURL)

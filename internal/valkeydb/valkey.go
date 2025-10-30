@@ -47,26 +47,23 @@ func (v *ValkeyClient) InsertJob(ctx context.Context, jobID string) error {
 	return nil
 }
 
-
-
-
-func (v *ValkeyClient) ConsumeJob(ctx context.Context) (string, error) { 
+func (v *ValkeyClient) ConsumeJob(ctx context.Context) (string, error) {
 
 	cmd := v.Client.B().Brpop().
-	Key("job-queue").
-	Timeout(0).
-	Build()
+		Key("job-queue").
+		Timeout(0).
+		Build()
 
 	res := v.Client.Do(ctx, cmd)
-	
+
 	arr, err := res.AsStrSlice()
 
-	if err != nil { 
+	if err != nil {
 
 		return "", fmt.Errorf("failed to parse blocking right pop respose: %w", err)
 	}
 
-	queuedJob := arr[1] 
+	queuedJob := arr[1]
 
 	return queuedJob, nil
 
