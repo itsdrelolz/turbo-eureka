@@ -37,7 +37,7 @@ func (s *Store) Close() {
 	s.Pool.Close()
 }
 
-func (s *Store) InsertJobAndGetID(ctx context.Context, fileUrl string, jobStatus storage.JobStatus) (uuid.NullUUID, error) {
+func (s *Store) InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus storage.JobStatus) (uuid.NullUUID, error) {
 
 	var newId uuid.NullUUID
 
@@ -61,7 +61,7 @@ func (s *Store) InsertJobAndGetID(ctx context.Context, fileUrl string, jobStatus
 
 }
 
-func (s *Store) GetJobByID(ctx context.Context, jobID uuid.NullUUID) (storage.Job, error) {
+func (s *Store) JobByID(ctx context.Context, jobID uuid.NullUUID) (storage.Job, error) {
 
 	var retrievedJob storage.Job
 

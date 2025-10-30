@@ -3,13 +3,12 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"job-matcher/mocks" // Make sure this import path is correct
+	"job-matcher/mocks" 	
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -31,9 +30,9 @@ func TestHandleUploadResume_Success(t *testing.T) {
 
 	expectedFileURL := "http://s3.com/mock-uuid.pdf"
 
-	mockStore.On("Upload", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&manager.UploadOutput{Location: expectedFileURL}, nil)
+	mockStore.On("Upload", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(expectedFileURL, nil)
 
-	mockDB.On("InsertJobAndGetID", mock.Anything, expectedFileURL).Return(expectedDBResult, nil)
+	mockDB.On("InsertJobReturnID", mock.Anything, expectedFileURL, mock.Anything).Return(expectedDBResult, nil)
 
 	mockQueue.On("InsertJob", mock.Anything, expectedJobID).Return(nil)
 	handler := NewAPIHandler(mockDB, mockQueue, mockStore, "fake-bucket-name")

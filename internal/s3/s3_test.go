@@ -64,15 +64,12 @@ func TestUploadSuccess(t *testing.T) {
 	}
 
 	// Verify output
-	if output == nil {
+	if output == "" {
 		t.Fatal("Expected non-nil upload output, got nil")
 	}
 
-	if output.Location == "" {
-		t.Error("Expected non-empty location, got empty string")
-	}
 
-	t.Logf("Successfully uploaded file to: %s", output.Location)
+	t.Logf("Successfully uploaded file to: %s", output)
 }
 
 // TestUploadMultiplePDFs tests uploading multiple PDF files
@@ -107,7 +104,7 @@ func TestUploadMultiplePDFs(t *testing.T) {
 				t.Errorf("Failed to upload %s: %v", tc.name, err)
 			}
 
-			if output == nil || output.Location == "" {
+			if output == "" {
 				t.Errorf("Invalid upload output for %s", tc.name)
 			}
 		})
@@ -147,7 +144,7 @@ func TestUploadEmptyFile(t *testing.T) {
 
 	// Some implementations may allow empty files, others may not
 	// Just verify we get a response
-	if err == nil && output == nil {
+	if err == nil && output == "" {
 		t.Error("Expected either error or output, got neither")
 	}
 }

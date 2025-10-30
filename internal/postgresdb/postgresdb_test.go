@@ -3,6 +3,7 @@ package postgresdb_test
 import (
 	"context"
 	"job-matcher/internal/postgresdb"
+	"job-matcher/internal/storage"
 	"os"
 	"testing"
 )
@@ -47,7 +48,7 @@ func TestInsertJobAndGetIDSuccess(t *testing.T) {
 
 	resumeUrl := "https://example.com/resumes/johndoe.pdf"
 
-	jobID, err := postgresDB.InsertJobAndGetID(ctx, resumeUrl)
+	jobID, err := postgresDB.InsertJobReturnID(ctx, resumeUrl, storage.Queued)
 
 	if err != nil {
 

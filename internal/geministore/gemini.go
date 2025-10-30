@@ -23,7 +23,7 @@ func New(ctx context.Context, apiKey string) (*GeminiClient, error) {
 	return &GeminiClient{Client: client}, nil
 }
 
-func (g *GeminiClient) GetResumeText(ctx context.Context, resume []byte) (*genai.GenerateContentResponse, error) {
+func (g *GeminiClient) ExtractText(ctx context.Context, resume []byte) (*genai.GenerateContentResponse, error) {
 
 	parts := []*genai.Part{
 		&genai.Part{
@@ -51,4 +51,9 @@ func (g *GeminiClient) GetResumeText(ctx context.Context, resume []byte) (*genai
 
 	return result, nil
 
+}
+
+func (g *GeminiClient) Embed(ctx context.Context, resumeText *genai.GenerateContentResponse) error {
+	
+	return fmt.Errorf("")
 }

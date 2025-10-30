@@ -11,13 +11,13 @@ type MockJobStore struct {
 	mock.Mock
 }
 
-func (m *MockJobStore) InsertJobAndGetID(ctx context.Context, fileUrl string) (uuid.NullUUID, error) {
-	args := m.Called(ctx, fileUrl)
+func (m *MockJobStore) InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus storage.JobStatus) (uuid.NullUUID, error) {
+	args := m.Called(ctx, fileUrl, jobStatus)
 
 	return args.Get(0).(uuid.NullUUID), args.Error(1)
 }
 
-func (m *MockJobStore) GetJobByID(ctx context.Context, jobID uuid.NullUUID) (storage.Job, error) {
+func (m *MockJobStore) JobByID(ctx context.Context, jobID uuid.NullUUID) (storage.Job, error) {
 	args := m.Called(ctx, jobID)
 
 	if args.Get(0) == nil {
@@ -25,4 +25,9 @@ func (m *MockJobStore) GetJobByID(ctx context.Context, jobID uuid.NullUUID) (sto
 	}
 
 	return args.Get(0).(storage.Job), args.Error(1)
+}
+
+func (m *MockJobStore) UpdateJobStatus(ctx context.Context, jobID uuid.NullUUID, jobStatus storage.JobStatus) error {
+	args := m.Called(ctx, jobID, jobStatus)
+	return args.Error(1)
 }

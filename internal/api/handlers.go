@@ -2,9 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/google/uuid"
 	"job-matcher/internal/objectstore"
 	"job-matcher/internal/queue"
@@ -65,7 +63,7 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	jobID, err := h.db.InsertJobAndGetID(r.Context(), outputURL)
+	jobID, err := h.db.InsertJobReturnID(r.Context(), outputURL, storage.JobStatus(storage.Queued))
 
 	if !jobID.Valid {
 		http.Error(w, "Unable to find job status", http.StatusInternalServerError)
@@ -92,6 +90,6 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	log.Printf("Job %s queued successfully at %s", jobIDString, fileURL)
+	log.Printf("Job %s queued successfully at %s", jobIDString, outputURL)
 	json.NewEncoder(w).Encode(map[string]string{"jobId": jobIDString})
 }

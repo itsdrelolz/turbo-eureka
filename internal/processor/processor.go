@@ -63,7 +63,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 
 	log.Printf("Processing given job for ID: %s", jobID)
 
-	job, err := p.db.GetJobByID(ctx, uuid.NullUUID{UUID: jobID, Valid: true})
+	job, err := p.db.JobByID(ctx, uuid.NullUUID{UUID: jobID, Valid: true})
 
 	if err != nil {
 		log.Printf("Error fetching job %s details: %v", jobID, err)
@@ -85,15 +85,18 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 	userResume, err := p.store.Download(ctx, p.s3Bucket, job.FileUrl)
 
 	if err != nil {
-		log.Fatal("Failed downloading file into memory for job %s details: %v", jobID, err)
+		log.Fatalf("Failed downloading file into memory for job %s details: %v", jobID, err)
 		return
 
 	}
 
-	extractedText, err := p.gemini.GetResumeText(ctx, userResume)
+	extractedText, err := p.gemini.ExtractText(ctx, userResume)
 
 	if err != nil {
 		log.Fatalf("Failed to extract resume text for job %s, details: %v", jobID, err)
 	}
+
+	log.Println(extractedText)
+
 
 }

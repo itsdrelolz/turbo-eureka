@@ -7,5 +7,5 @@ import (
 )
 
 type ResumerParser interface {
-	GetResumeText(ctx context.Context, resume []byte) (*genai.GenerateContentResponse, error)
+	ExtractText(ctx context.Context, resume []byte) (*genai.GenerateContentResponse, error)
 }
