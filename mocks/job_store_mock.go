@@ -17,14 +17,14 @@ func (m *MockJobStore) InsertJobReturnID(ctx context.Context, fileUrl string, jo
 	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
-func (m *MockJobStore) JobByID(ctx context.Context, jobID uuid.UUID) (storage.Job, error) {
+func (m *MockJobStore) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, error) {
 	args := m.Called(ctx, jobID)
 
 	if args.Get(0) == nil {
-		return storage.Job{}, args.Error(1)
+		return &storage.Job{}, args.Error(1)
 	}
 
-	return args.Get(0).(storage.Job), args.Error(1)
+	return args.Get(0).(*storage.Job), args.Error(1)
 }
 
 func (m *MockJobStore) UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus storage.JobStatus) error {

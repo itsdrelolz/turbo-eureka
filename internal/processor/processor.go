@@ -2,36 +2,45 @@ package processor
 
 import (
 	"context"
-	"github.com/google/uuid"
 	"job-matcher/internal/gemini"
 	"job-matcher/internal/objectstore"
 	"job-matcher/internal/storage"
 	"log"
+	"fmt"
+	"log/slog"
+	"os"
 	"time"
+	"github.com/google/uuid"
 )
 
-type JobConsumer interface {
+type JobFetcher interface {
 	ConsumeJob(ctx context.Context) (string, error)
-	UpdateJobStatus(ctx context.Context, jobID uuid.UUID) (uuid.UUID, error)
 }
 
-type JobUpdated interface {
-	UpdateJobStatus(ctx context.Context, jobID uuid.UUID) (uuid.UUID, error)
-}
 
 type JobProcessor struct {
 	db       storage.JobStore
-	queue    JobConsumer
+	queue    JobFetcher
 	store    objectstore.FileStorer
 	s3Bucket string
 	gemini   gemini.ResumerParser
 }
 
-func NewJobProcessor(db storage.JobStore, queue JobConsumer, store objectstore.FileStorer, s3Bucket string) *JobProcessor {
+func NewJobProcessor(db storage.JobStore, queue JobFetcher, store objectstore.FileStorer, s3Bucket string) *JobProcessor {
 	return &JobProcessor{db: db, queue: queue, store: store, s3Bucket: s3Bucket}
 }
 
+
+/*
+ADD failure recover for jobs as well. A job should know when to quit and try another job.
+*/
+
 func (p *JobProcessor) Run(ctx context.Context) {
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	slog.SetDefault(logger)
+	
 	log.Printf("Job processor has started, waiting for jobs...")
 
 	// first thing is to now pull a job off of the worker queue
@@ -63,49 +72,96 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 
 	log.Printf("Processing given job for ID: %s", jobID)
 
-	job, err := p.db.JobByID(ctx, uuid.UUID(jobID))
 
-	if err != nil {
-		log.Printf("Error fetching job %s details: %v", jobID, err)
-		return
+	job, err := p.handleJobWithRetry(ctx, jobID)
+
+	
+
+}
+
+func (p *JobProcessor) handleJobWithRetry(ctx context.Context, jobID uuid.UUID) (*storage.Job, error) { 
+
+	const maxRetries = 3 
+
+
+	for i := 0; i < maxRetries; i++ { 
+
+		job, err := p.db.JobByID(ctx, jobID)
+
+		if err == nil || !isRetryable(err) { 
+			return job, err 
+		}
+
+	log.Printf("Retrying fetch for job %s (attempt %d): %v", jobID, i + 1, err) 
+
+	// Exponential backoff
+	// multiplicatively decrease the rate of some process, in order to gradually find an acceptable rate
+	time.Sleep(time.Duration(1 << (i) * time.Second))
+	}
+	return nil, fmt.Errorf("failed to fetch job %s after %d retries", jobID, maxRetries)
+}
+
+
+
+// Function to process the job files 
+// Updates the job status to processing, downloads the resume into memory. 
+// Uses the gemini api to extract the text. 
+// Then passes the text and uses gemini to create an embedding, 
+// Returns the extracted text and resulting embedding 
+
+func (p *JobProcessor) processJobFile(ctx context.Context, jobID uuid.UUID, job *storage.Job) (string, []float32, error){ 
+
+
+	if err := p.db.UpdateJobStatus(ctx, jobID, storage.Processing); err != nil { 
+		fmt.Errorf("Failed to update job status for job %s, with %v", jobID, err)
+		return "", nil, err
 	}
 
-	// first update the job to have the status processing
-	// then it should start extracting the text using text extracting library
-
-	// UPDATED JOB STATUS
-
-	err = p.db.UpdateJobStatus(ctx, uuid.UUID(jobID), storage.Pending)
-
-	if err != nil {
-		log.Printf("Failed updating status for job: %s details: %v", jobID, err)
-		return
-	}
 
 	userResume, err := p.store.Download(ctx, p.s3Bucket, job.FileUrl)
 
 	if err != nil {
-		log.Fatalf("Failed downloading file into memory for job %s details: %v", jobID, err)
-		return
-
+        log.Fatalf("Failed downloading file for job %s: %v", jobID, err)
+        return "", nil, err 
+    
 	}
 
-	extractedText, err := p.gemini.ExtractText(ctx, userResume)
+
+	extracedText, err := p.gemini.ExtractText(ctx, userResume)
 
 	if err != nil {
-		log.Fatalf("Failed to extract resume text for job %s, details: %v", jobID, err)
-	}
+        log.Fatalf("Failed to extract resume text for job %s: %v", jobID, err)
+        return "", nil, err 
+    }
 
-	embeddings, err := p.gemini.Embed(ctx, extractedText)
 
-	if err != nil { 
-		log.Fatalf("Failed embedding for job %s, details: %v", jobID, err)
-	}
-
-	err = p.db.InsertEmbeddingWithID(ctx, jobID, embeddings)
-
+	embeddedResume, err := p.gemini.Embed(ctx, extracedText)
 
 	if err != nil { 
-		log.Fatalf("Failed to insert embedding with job %s, details: %v", jobID, err)
+        log.Fatalf("Failed embedding for job %s: %v", jobID, err)
+        return "", nil, err
+    }
+
+	return extracedText, embeddedResume, nil
+
+
+
+}
+
+
+// function is the final step to processing a job
+// Its purpose is to save the progress made even if the process manages to fail on insertion 
+func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID, embeddings []float32) error { 
+
+	err := p.db.SetEmbeddingWithID(ctx, jobID, embeddings)
+
+	if err != nil { 
+		return fmt.Errorf("Failed to update job status for job: %s, with: %v", jobID, err)
 	}
+	return nil
+
+}
+
+func isRetryable(err error) bool {
+	return false
 }

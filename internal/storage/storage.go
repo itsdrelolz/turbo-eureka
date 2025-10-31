@@ -9,8 +9,8 @@ import (
 type JobStatus int
 
 const (
-	Pending JobStatus = iota
-	Queued
+	Queued JobStatus = iota
+	Processing
 	Failed
 	Completed
 )
@@ -24,17 +24,17 @@ type Job struct {
 
 type JobStore interface {
 	InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus JobStatus) (uuid.UUID, error)
-	JobByID(ctx context.Context, jobID uuid.UUID) (Job, error)
+	JobByID(ctx context.Context, jobID uuid.UUID) (*Job, error)
 	UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus JobStatus) error
-	InsertEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeEmbedding []byte) error 
+	SetEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeEmbedding []float32) error 
 }
 
 func (s JobStatus) String() string {
 	switch s {
 	case Queued:
 		return "queued"
-	case Pending:
-		return "pending"
+	case Processing:
+		return "processing"
 	case Completed:
 		return "completed"
 	case Failed:

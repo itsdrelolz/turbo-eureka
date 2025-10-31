@@ -6,5 +6,5 @@ import (
 
 type ResumerParser interface {
 	ExtractText(ctx context.Context, resume []byte) (string, error)
-	Embed(ctz context.Context, resumeText string ) ([]byte, error)
+	Embed(ctx context.Context, resumeText string ) ([]float32, error)
 }

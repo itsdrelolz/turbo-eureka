@@ -61,7 +61,7 @@ func (s *Store) InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus
 
 }
 
-func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (storage.Job, error) {
+func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, error) {
 
 	var retrievedJob storage.Job
 
@@ -78,10 +78,10 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (storage.Job, erro
 	).Scan(&retrievedJob.ID, &retrievedJob.JobStatus, &retrievedJob.FileUrl, &retrievedJob.CreatedAt)
 
 	if err != nil {
-		return storage.Job{}, fmt.Errorf("Failed to retrieve job with error: %w", err)
+		return &storage.Job{}, fmt.Errorf("Failed to retrieve job with error: %w", err)
 	}
 
-	return retrievedJob, nil
+	return &retrievedJob, nil
 
 }
 
@@ -109,7 +109,7 @@ func (s *Store) UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus 
 
 }
 
-func (s *Store) InsertEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeEmbedding []byte) error { 
+func (s *Store) InsertEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeEmbedding []float32) error { 
 
 
 
@@ -138,8 +138,8 @@ func (s *Store) InsertEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resu
 
 func (s *Store) String(js storage.JobStatus) string {
 	switch js {
-	case storage.Pending:
-		return "pending"
+	case storage.Processing:
+		return "processing"
 	case storage.Queued:
 		return "queued"
 	case storage.Failed:

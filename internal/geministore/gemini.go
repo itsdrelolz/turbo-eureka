@@ -2,7 +2,6 @@ package geministore
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"google.golang.org/genai"
@@ -46,7 +45,7 @@ func (g *GeminiClient) ExtractText(ctx context.Context, resume []byte) (string, 
 
 }
 
-func (g *GeminiClient) Embed(ctx context.Context, resumeText string) ([]byte, error) {
+func (g *GeminiClient) Embed(ctx context.Context, resumeText string) ([]float32, error) {
 
 	contents := []*genai.Content{
 		genai.NewContentFromText(resumeText, genai.RoleUser),
@@ -62,10 +61,12 @@ func (g *GeminiClient) Embed(ctx context.Context, resumeText string) ([]byte, er
 		return nil, fmt.Errorf("Failed to embed given content with: %w", err)
 	}
 
-	embeddings, err := json.MarshalIndent(result.Embeddings, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("Failed to format embeddings with: %w", err)
+	if len(result.Embeddings) == 0 || len(result.Embeddings[0].Values) == 0 {
+		return nil, fmt.Errorf("gemini returned empty embedding result")
 	}
 
-	return embeddings, nil
+	vector := result.Embeddings[0].Values
+
+
+	return vector, nil
 }
