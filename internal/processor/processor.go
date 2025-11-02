@@ -198,7 +198,7 @@ func (p *JobProcessor) processJobFile(ctx context.Context, job *storage.Job, job
 func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, jobStatus storage.JobStatus) error {
 
 	const maxRetries = 3
-	const baseDelay = 10
+	const baseDelay = 10 * time.Second
 
 	for i := range maxRetries {
 
@@ -224,19 +224,29 @@ func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID
 
 	const maxRetries = 3
 
-	const baseDelay = 10
+	const baseDelay = 10 * time.Second
 
 	for i := range maxRetries {
 
 		err := p.db.SetEmbeddingWithID(ctx, jobID, embeddings)
 
-		if err != nil || !isRetryable(err) {
+		if err == nil {
+			return nil // Return immediately on success.
+		}
+
+		if !isRetryable(err) {
 			return fmt.Errorf("Failed to update job status for job: %s, with: %v", jobID, err)
 		}
 
-		log.Fatalf("Failed job %s with err: %v (attempt: %d)", jobID, err, i+1)
-	}
-	return nil
+		slog.Warn("error saving embedding, retrying...",
+			"jobID", jobID, "attempt", i+1, "error", err)
+
+		if i < maxRetries - 1 {
+			time.Sleep(calculateExponentialBackoff(i, baseDelay))
+		}
+		}
+
+	return fmt.Errorf("failed to save embedding for job %s after %d retries", jobID, maxRetries)
 
 }
 
@@ -256,8 +266,7 @@ func isRetryable(err error) bool {
 }
 
 // calulates the exponential backoff by baseDelay * 2^attempts
-func calculateExponentialBackoff(attempts int, baseDelaySeconds time.Duration) time.Duration {
-	backoff := float64(baseDelaySeconds) * math.Pow(2, float64(attempts))
-
-	return time.Duration(backoff) * time.Second
+func calculateExponentialBackoff(attempts int, baseDelay time.Duration) time.Duration {
+	factor := math.Pow(2, float64(attempts))
+	return time.Duration(float64(baseDelay) * factor)
 }
