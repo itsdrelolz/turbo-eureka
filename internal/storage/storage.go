@@ -26,7 +26,7 @@ type JobStore interface {
 	InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus JobStatus) (uuid.UUID, error)
 	JobByID(ctx context.Context, jobID uuid.UUID) (*Job, error)
 	UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus JobStatus) error
-	SetEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeEmbedding []float32) error 
+	SetEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeEmbedding []float32) error
 }
 
 func (s JobStatus) String() string {

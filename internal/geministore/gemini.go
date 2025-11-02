@@ -2,9 +2,13 @@ package geministore
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"google.golang.org/genai"
+	"google.golang.org/genproto/googleapis/rpc/code"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type GeminiClient struct {
@@ -30,13 +34,29 @@ func (g *GeminiClient) ExtractText(ctx context.Context, resume []byte) (string, 
 		genai.NewContentFromBytes(resume, "application/pdf", genai.RoleUser),
 	}
 
+	var invalidKey *genai.APIError
+
 	result, err := g.Client.Models.GenerateContent(
 		ctx,
 		"gemini-2.5-flash",
 		contents,
 		nil,
 	)
+
 	if err != nil {
+		st, ok := status.FromError(err) 
+
+		if ok { 
+
+			switch st.Code() {
+
+	case codes.Unauthenticated, codes.PermissionDenied: 
+		return "", fmt.Errorf("gemini authentication failed: %w", ErrPermanentFailure)
+
+	case codes.InvalidArgument: 
+		return "", fmt.Errorf("gemini invalud input (400): %w", ErrPermanentFailure)
+			} 
+		}
 
 		return "", fmt.Errorf("Failed to extract text from resume with: %w", err)
 	}
@@ -56,8 +76,18 @@ func (g *GeminiClient) Embed(ctx context.Context, resumeText string) ([]float32,
 		contents,
 		nil,
 	)
-
 	if err != nil {
+
+        st, ok := status.FromError(err)
+        if ok {
+            // 🛑 Permanent Error Check 2: Bad credentials or bad input
+            switch st.Code() {
+            case codes.Unauthenticated, codes.PermissionDenied: // Invalid API key or scope
+                return nil, fmt.Errorf("gemini authentication failed: %w", ErrPermanentFailure) 
+            case codes.InvalidArgument: // Bad input (e.g., file too big, invalid format)
+                return nil, fmt.Errorf("gemini invalid input (400): %w", ErrPermanentFailure) 
+            }
+        }
 		return nil, fmt.Errorf("Failed to embed given content with: %w", err)
 	}
 
@@ -66,7 +96,6 @@ func (g *GeminiClient) Embed(ctx context.Context, resumeText string) ([]float32,
 	}
 
 	vector := result.Embeddings[0].Values
-
 
 	return vector, nil
 }

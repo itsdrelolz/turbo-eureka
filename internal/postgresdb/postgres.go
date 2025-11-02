@@ -2,9 +2,11 @@ package postgresdb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	// pool required in order to handle concurrent access
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"job-matcher/internal/storage"
 )
@@ -77,6 +79,12 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 		jobID,
 	).Scan(&retrievedJob.ID, &retrievedJob.JobStatus, &retrievedJob.FileUrl, &retrievedJob.CreatedAt)
 
+	var notFoundErr *pgconn.PgError
+
+	if errors.As(err, &notFoundErr) {
+		return nil, fmt.Errorf("Row not inserted in DB (404): %w", ErrPermananentFailure)
+	}
+
 	if err != nil {
 		return &storage.Job{}, fmt.Errorf("Failed to retrieve job with error: %w", err)
 	}
@@ -86,7 +94,6 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 }
 
 func (s *Store) UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus storage.JobStatus) error {
-
 
 	sql := `
 	UPDATE job
@@ -99,7 +106,13 @@ func (s *Store) UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus 
 		sql,
 		jobStatus.String(),
 		jobID,
-		)
+	)
+
+	var notFoundErr *pgconn.PgError
+
+	if errors.As(err, &notFoundErr) {
+		return fmt.Errorf("Job not found (404): %w", ErrPermanentFailure)
+	}
 
 	if err != nil {
 		return fmt.Errorf("Failed to update job with error: %w", err)
@@ -109,9 +122,7 @@ func (s *Store) UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus 
 
 }
 
-func (s *Store) InsertEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeEmbedding []float32) error { 
-
-
+func (s *Store) SetEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeEmbedding []float32) error {
 
 	sql := `
 		UPDATE jobs
@@ -124,15 +135,19 @@ func (s *Store) InsertEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resu
 		sql,
 		jobID,
 		resumeEmbedding,
-		)
+	)
 
+	var notFoundErr *pgconn.PgError
+
+	if errors.As(err, &notFoundErr) {
+		return fmt.Errorf("Embedding row not found (404): %w", ErrPermanentFailure)
+	}
 
 	if err != nil {
 		return fmt.Errorf("Failed to insert embedding into job with error: %w", err)
 	}
 
 	return nil
-
 
 }
 

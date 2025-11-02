@@ -2,11 +2,14 @@ package s3
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 	"io"
 )
 
@@ -68,6 +71,17 @@ func (fs *FileStore) Download(ctx context.Context, bucket, key string) ([]byte, 
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
+	var notFoundErr *types.NotFound
+	var accessDenied *smithy.APIError
+
+	if errors.As(err, &notFoundErr) {
+		return nil, fmt.Errorf("file not found in s3 (404): %w", ErrPermanentFailure)
+	}
+
+	if errors.As(err, &accessDenied) {
+		return nil, fmt.Errorf("access denied (403): %w", ErrPermanentFailure)
+
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to download file: %w", err)

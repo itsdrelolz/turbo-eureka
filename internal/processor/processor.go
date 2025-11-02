@@ -2,7 +2,9 @@ package processor
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"job-matcher/internal/gemini"
 	"job-matcher/internal/objectstore"
 	"job-matcher/internal/storage"
@@ -11,14 +13,14 @@ import (
 	"math"
 	"os"
 	"time"
-
-	"github.com/google/uuid"
 )
+
+var ErrPermanentFailure = errors.New("permanent failure, do not retry")
+
 
 type JobFetcher interface {
 	ConsumeJob(ctx context.Context) (string, error)
 }
-
 
 type JobProcessor struct {
 	db       storage.JobStore
@@ -32,17 +34,13 @@ func NewJobProcessor(db storage.JobStore, queue JobFetcher, store objectstore.Fi
 	return &JobProcessor{db: db, queue: queue, store: store, s3Bucket: s3Bucket}
 }
 
-
-/*
-ADD failure recover for jobs as well. A job should know when to quit and try another job.
-*/
-
+// Runner for a job. A job may complete the work given to it and be marked as complete, or fail and be marked incomplete.
 func (p *JobProcessor) Run(ctx context.Context) {
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	slog.SetDefault(logger)
-	
+
 	log.Printf("Job processor has started, waiting for jobs...")
 
 	// first thing is to now pull a job off of the worker queue
@@ -70,169 +68,195 @@ func (p *JobProcessor) Run(ctx context.Context) {
 
 }
 
-// logic for handling single job
-
+// Logic for handling a jobs processings. The job has a set limit for how long it may run before cancelling.
+// A job attemps to fetch the necessary information from the db
+// It then attempts to generate the emedding of the given resume
+// The job then updates the db with the embedding
 func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 
 	log.Printf("Processing given job for ID: %s", jobID)
 
-
+	// hard timelimit set for the completion of the job
 	const totalJobTimeout = 30 * time.Second
-	// if this fails, mark the job as failed
 
 	jobCtx, cancel := context.WithTimeout(ctx, totalJobTimeout)
+	defer cancel()
 
-	
 	job, err := p.fetchJobWithRetry(jobCtx, jobID)
 
 	if err != nil {
-
 		log.Printf("Faild job with error: %v", err)
+
+		if !isRetryable(err) { 
+			p.db.UpdateJobStatus(context.Background(), jobID, storage.Failed)
+		}
 	}
 
 	resumeEmbedding, err := p.processJobFile(jobCtx, job, job.ID)
 
-	if err != nil { 
-		log.Printf("Faild job with error: %w", err)
+	if err != nil {
+		if errors.Is(err, ErrPermanentFailure) {
+			log.Printf("Fatal, non-retryable failure for job %s: %v. Marking as failed.", jobID, err)
+			p.db.UpdateJobStatus(context.Background(), jobID, storage.Failed)
+			return // End job execution instantly
+		}
+
+		log.Printf("Transient error processing job %s: %v. Job will be requeued.", jobID, err)
+		return 
 	}
 
-	err = p.saveResultsWithRetry(jobCtx, job.ID, resumeEmbedding)
+	if err := p.saveResultsWithRetry(jobCtx, job.ID, resumeEmbedding); err != nil {
+		log.Printf("Failed to save results for job %s: %v. Job failed.", jobID, err)
+		if !isRetryable(err) {
+			p.db.UpdateJobStatus(context.Background(), jobID, storage.Failed)
+		}
+		return
+	}
 
-	cancel()
-
+	log.Printf("Job %s completed successfully.", jobID)
 
 }
 
 
-func (p *JobProcessor) fetchJobWithRetry(ctx context.Context, jobID uuid.UUID)  (*storage.Job, error) { 
 
-	const maxRetries = 3 
+// Attempts to fetch a the necessary informaton for a give job using an ID.
+// If it fails to deliver the necessary data, may attempt to retry based on the error
+// A max amount of retries is defined.
+// return the full job or returns an error if it is not able to recover
+func (p *JobProcessor) fetchJobWithRetry(ctx context.Context, jobID uuid.UUID) (*storage.Job, error) {
+
+	const maxRetries = 3
 
 	// database calls can be more frequent
 	const baseDelay = 1 * time.Second
 
-	for i := range maxRetries { 
+	for i := range maxRetries {
 
 		job, err := p.db.JobByID(ctx, jobID)
 
-		if err == nil { 
+		if err == nil {
 			return job, nil
 		}
 
-		if !isRetryable(err) { 
-
+		if !isRetryable(err) {
 			return nil, fmt.Errorf("non-retryable error fetching job %s: %w", jobID, err)
 		}
-// 3. Transient Failure: Log, Sleep, and Retry
-        slog.Warn("Transient error fetching job, retrying...", 
-            "jobID", jobID, "attempt", i+1, "error", err)
-            
-        // Use backoff only between attempts (not on the last attempt)
-        if i < maxRetries-1 {
-            delay := calculateExponentialBackoff(i, baseDelay)
-            time.Sleep(delay)
-        }
-    }
-    
-    // 4. Final Failure: Max attempts reached
-    return nil, fmt.Errorf("failed to fetch job %s after %d retries: %w", jobID, maxRetries, ctx.Err())
-}
+		// 3. Transient Failure: Log, Sleep, and Retry
+		slog.Warn("Transient error fetching job, retrying...",
+			"jobID", jobID, "attempt", i+1, "error", err)
 
-
-
-
-// Function to process the job files 
-// Updates the job status to processing, downloads the resume into memory. 
-// Uses the gemini api to extract the text. 
-// Then passes the text and uses gemini to create an embedding, 
-// Returns the extracted text and resulting embedding 
-
-func (p *JobProcessor) processJobFile(ctx context.Context, job *storage.Job, jobID uuid.UUID) ([]float32, error){ 
-
-
-	if err := p.updateJobWithRetry(ctx, jobID, storage.Processing); err != nil { 
-		fmt.Errorf("Failed to update job status for job %s, with %v", jobID, err)
-		return nil, err
+		// Use backoff only between attempts (not on the last attempt)
+		if i < maxRetries-1 {
+			delay := calculateExponentialBackoff(i, baseDelay)
+			time.Sleep(delay)
+		}
 	}
 
+	// 4. Final Failure: Max attempts reached
+	return nil, fmt.Errorf("failed to fetch job %s after %d retries: %w", jobID, maxRetries, ctx.Err())
+}
+
+//	starts the processing of the actual job
+//
+// The downloaded resume has its text extracted and then embedded
+//
+//	returns either an embedding for the given resume or an error
+func (p *JobProcessor) processJobFile(ctx context.Context, job *storage.Job, jobID uuid.UUID) ([]float32, error) {
+
+	if err := p.updateJobWithRetry(ctx, jobID, storage.Processing); err != nil {
+		return nil, fmt.Errorf("Failed to update job status for job %s, with %v", jobID, err)
+	}
 
 	userResume, err := p.store.Download(ctx, p.s3Bucket, job.FileUrl)
 
 	if err != nil {
-        log.Printf("Failed downloading file for job %s: %v", jobID, err)
-        return nil, err 
-    
-	}
+		log.Printf("Failed downloading file for job %s: %v", jobID, err)
+		return nil, err
 
+	}
 
 	extracedText, err := p.gemini.ExtractText(ctx, userResume)
 
 	if err != nil {
-        log.Printf("Failed to extract resume text for job %s: %v", jobID, err)
-        return nil, err 
-    }
-
+		log.Printf("Failed to extract resume text for job %s: %v", jobID, err)
+		return nil, err
+	}
 
 	embeddedResume, err := p.gemini.Embed(ctx, extracedText)
 
-	if err != nil { 
-        log.Printf("Failed embedding for job %s: %v", jobID, err)
-        return nil, err
-    }
+	if err != nil {
+		log.Printf("Failed embedding for job %s: %v", jobID, err)
+		return nil, err
+	}
 
 	return embeddedResume, nil
 }
 
-
-func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, jobStatus storage.JobStatus) error { 
-
+// attempts to update the status of the job with a given id and status
+// A max number of retries is defined as well as a base delay
+// function updates the status of a job or returns an error if the job is not recoverable
+func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, jobStatus storage.JobStatus) error {
 
 	const maxRetries = 3
 	const baseDelay = 10
 
-	for i := range maxRetries { 
+	for i := range maxRetries {
 
-	
 		err := p.db.UpdateJobStatus(ctx, jobID, jobStatus)
 
-		if err == nil || !isRetryable(err) { 
+		if err == nil || !isRetryable(err) {
 			return err
-		}	
+		}
 
-		log.Printf("Retrying failed job %s, (attempt %d). With error: %v", jobID, i + 1, err)
+		log.Printf("Retrying failed job %s, (attempt %d). With error: %v", jobID, i+1, err)
 
-		
-
-	time.Sleep(time.Duration(calculateExponentialBackoff(i, baseDelay)))
+		time.Sleep(time.Duration(calculateExponentialBackoff(i, baseDelay)))
 
 	}
-
 
 	return fmt.Errorf("failed to fetch job %s after %d retries", jobID, maxRetries)
 }
 
+//	the final step to processing a job
+//
+// saves results of the job or returns an error if not recoverable
+func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID, embeddings []float32) error {
 
-// function is the final step to processing a job
-// Its purpose is to save the progress made even if the process manages to fail on insertion 
-func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID, embeddings []float32) error { 
+	const maxRetries = 3
 
-	err := p.db.SetEmbeddingWithID(ctx, jobID, embeddings)
+	const baseDelay = 10
 
-	if err != nil { 
-		return fmt.Errorf("Failed to update job status for job: %s, with: %v", jobID, err)
+	for i := range maxRetries {
+
+		err := p.db.SetEmbeddingWithID(ctx, jobID, embeddings)
+
+		if err != nil || !isRetryable(err) {
+			return fmt.Errorf("Failed to update job status for job: %s, with: %v", jobID, err)
+		}
+
+		log.Fatalf("Failed job %s with err: %v (attempt: %d)", jobID, err, i+1)
 	}
 	return nil
 
 }
 
+// function checks whether the error is recoverable based on some common cases
 func isRetryable(err error) bool {
-	return false
+	if err == nil {
+		return false
+	}
+
+	// do not retry unrecoverable errors
+	if errors.Is(err, ErrPermanentFailure) { 
+		return false
+	}
+
+	return true
+
 }
 
-
-
 // calulates the exponential backoff by baseDelay * 2^attempts
-func calculateExponentialBackoff(attempts int, baseDelaySeconds time.Duration) time.Duration { 
+func calculateExponentialBackoff(attempts int, baseDelaySeconds time.Duration) time.Duration {
 	backoff := float64(baseDelaySeconds) * math.Pow(2, float64(attempts))
 
 	return time.Duration(backoff) * time.Second
