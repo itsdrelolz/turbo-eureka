@@ -44,18 +44,18 @@ func (g *GeminiClient) ExtractText(ctx context.Context, resume []byte) (string, 
 	)
 
 	if err != nil {
-		st, ok := status.FromError(err) 
+		st, ok := status.FromError(err)
 
-		if ok { 
+		if ok {
 
 			switch st.Code() {
 
-	case codes.Unauthenticated, codes.PermissionDenied: 
-		return "", fmt.Errorf("gemini authentication failed: %w", ErrPermanentFailure)
+			case codes.Unauthenticated, codes.PermissionDenied:
+				return "", fmt.Errorf("gemini authentication failed: %w", ErrPermanentFailure)
 
-	case codes.InvalidArgument: 
-		return "", fmt.Errorf("gemini invalud input (400): %w", ErrPermanentFailure)
-			} 
+			case codes.InvalidArgument:
+				return "", fmt.Errorf("gemini invalud input (400): %w", ErrPermanentFailure)
+			}
 		}
 
 		return "", fmt.Errorf("Failed to extract text from resume with: %w", err)
@@ -78,16 +78,16 @@ func (g *GeminiClient) Embed(ctx context.Context, resumeText string) ([]float32,
 	)
 	if err != nil {
 
-        st, ok := status.FromError(err)
-        if ok {
-            // 🛑 Permanent Error Check 2: Bad credentials or bad input
-            switch st.Code() {
-            case codes.Unauthenticated, codes.PermissionDenied: // Invalid API key or scope
-                return nil, fmt.Errorf("gemini authentication failed: %w", ErrPermanentFailure) 
-            case codes.InvalidArgument: // Bad input (e.g., file too big, invalid format)
-                return nil, fmt.Errorf("gemini invalid input (400): %w", ErrPermanentFailure) 
-            }
-        }
+		st, ok := status.FromError(err)
+		if ok {
+			// 🛑 Permanent Error Check 2: Bad credentials or bad input
+			switch st.Code() {
+			case codes.Unauthenticated, codes.PermissionDenied: // Invalid API key or scope
+				return nil, fmt.Errorf("gemini authentication failed: %w", ErrPermanentFailure)
+			case codes.InvalidArgument: // Bad input (e.g., file too big, invalid format)
+				return nil, fmt.Errorf("gemini invalid input (400): %w", ErrPermanentFailure)
+			}
+		}
 		return nil, fmt.Errorf("Failed to embed given content with: %w", err)
 	}
 

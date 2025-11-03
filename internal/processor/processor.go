@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"job-matcher/internal/gemini"
 	"job-matcher/internal/objectstore"
 	"job-matcher/internal/storage"
@@ -12,11 +11,18 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
-var ErrPermanentFailure = errors.New("permanent failure, do not retry")
+// Set number of workers
 
+const numWorkers = 5
+
+// indicates an unrecoverable error
+var ErrPermanentFailure = errors.New("permanent failure, do not retry")
 
 type JobFetcher interface {
 	ConsumeJob(ctx context.Context) (string, error)
@@ -30,42 +36,89 @@ type JobProcessor struct {
 	gemini   gemini.ResumerParser
 }
 
-func NewJobProcessor(db storage.JobStore, queue JobFetcher, store objectstore.FileStorer, s3Bucket string) *JobProcessor {
-	return &JobProcessor{db: db, queue: queue, store: store, s3Bucket: s3Bucket}
+func NewJobProcessor(db storage.JobStore, queue JobFetcher, store objectstore.FileStorer, s3Bucket string, gemini gemini.ResumerParser) *JobProcessor {
+	return &JobProcessor{db: db, queue: queue, store: store, s3Bucket: s3Bucket, gemini: gemini}
 }
 
 // Runner for a job. A job may complete the work given to it and be marked as complete, or fail and be marked incomplete.
+func (p *JobProcessor) startConsumer(ctx context.Context, jobsChan chan uuid.UUID) {
+
+	defer close(jobsChan)
+
+	log.Printf("Job processor has started, waiting for jobs...")
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("Job consumer stopping...")
+			return
+		default:
+			jobIdStr, err := p.queue.ConsumeJob(ctx)
+
+			if err != nil {
+				log.Printf("error consuming from job queue, trying again...")
+				time.Sleep(5 * time.Second) // wait and then try again
+				continue
+			}
+
+			jobID, err := uuid.Parse(jobIdStr)
+
+			if err != nil {
+				log.Printf("invalid job id given, skipping job: %s. Error: %v", jobIdStr, err)
+				continue
+			}
+
+			// send job id to worker channel
+			jobsChan <- jobID
+		}
+	}
+}
+
+func (p *JobProcessor) startWorker(ctx context.Context, workerID int, jobsChan <-chan uuid.UUID) {
+
+	log.Printf("Worker #%d started", workerID)
+
+	for jobID := range jobsChan {
+
+		p.processJob(ctx, jobID)
+
+	}
+	log.Printf("Worker #%d stopped.", workerID)
+}
+
 func (p *JobProcessor) Run(ctx context.Context) {
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	slog.SetDefault(logger)
 
-	log.Printf("Job processor has started, waiting for jobs...")
+	log.Printf("Job processor has started, launching %d workers...", numWorkers)
 
-	// first thing is to now pull a job off of the worker queue
+	jobsChan := make(chan uuid.UUID)
 
-	for {
+	var wg sync.WaitGroup
 
-		jobIdStr, err := p.queue.ConsumeJob(ctx)
+	// separate go routine just for consuming jobs.
+	go p.startConsumer(ctx, jobsChan)
 
-		if err != nil {
-			log.Printf("error consuming job from queue: %v", err)
-			time.Sleep(5 * time.Second) // wait and then try again
-			continue
-		}
 
-		jobID, err := uuid.Parse(jobIdStr)
+	// starts the set amount of workers
+	for i := 1; i <= numWorkers; i++ {
 
-		if err != nil {
-			log.Printf("invalid job id given, trying another job: %s", jobIdStr)
-			continue
-		}
+		wg.Add(1)
 
-		p.processJob(ctx, jobID)
+		go func(workerID int) {
+			defer wg.Done()
+			p.startWorker(ctx, workerID, jobsChan)
+		}(i)
 
 	}
 
+	<-ctx.Done()
+	log.Printf("Shutdown signal receieved. Waiting for workers to finish...")
+
+	wg.Wait()
+	log.Printf("All workers stopped. Job processor shut down gracefully.")
 }
 
 // Logic for handling a jobs processings. The job has a set limit for how long it may run before cancelling.
@@ -74,11 +127,11 @@ func (p *JobProcessor) Run(ctx context.Context) {
 // The job then updates the db with the embedding
 func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 
-	log.Printf("Processing given job for ID: %s", jobID)
+	log.Printf("Processing given job with ID: %s", jobID)
 
 	// hard timelimit set for the completion of the job
+	// updating a jobs status to failed or completed bypasses this limit
 	const totalJobTimeout = 30 * time.Second
-
 	jobCtx, cancel := context.WithTimeout(ctx, totalJobTimeout)
 	defer cancel()
 
@@ -87,7 +140,8 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 	if err != nil {
 		log.Printf("Faild job with error: %v", err)
 
-		if !isRetryable(err) { 
+		// unrecoverable job, mark as failed
+		if !isRetryable(err) {
 			p.db.UpdateJobStatus(context.Background(), jobID, storage.Failed)
 		}
 	}
@@ -102,7 +156,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 		}
 
 		log.Printf("Transient error processing job %s: %v. Job will be requeued.", jobID, err)
-		return 
+		return
 	}
 
 	if err := p.saveResultsWithRetry(jobCtx, job.ID, resumeEmbedding); err != nil {
@@ -113,19 +167,24 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 		return
 	}
 
+	// context.Background neccessary, this ensures updating the status to complete isn't limited to the 30 second limit
+	if updateErr := p.updateJobWithRetry(context.Background(), jobID, storage.Completed); updateErr != nil {
+		log.Printf("WARNING: Job %s completed work, but failed to mark status as Completed: %v", jobID, updateErr)
+	} else {
+		log.Printf("Job %s completed successfully.", jobID)
+	}
+
 	log.Printf("Job %s completed successfully.", jobID)
 
 }
 
-
-
-// Attempts to fetch a the necessary informaton for a give job using an ID.
+// Attempts to fetch the necessary informaton for a give job using an ID.
 // If it fails to deliver the necessary data, may attempt to retry based on the error
 // A max amount of retries is defined.
 // return the full job or returns an error if it is not able to recover
 func (p *JobProcessor) fetchJobWithRetry(ctx context.Context, jobID uuid.UUID) (*storage.Job, error) {
 
-	const maxRetries = 3
+	const maxRetries = 4
 
 	// database calls can be more frequent
 	const baseDelay = 1 * time.Second
@@ -148,11 +207,15 @@ func (p *JobProcessor) fetchJobWithRetry(ctx context.Context, jobID uuid.UUID) (
 		// Use backoff only between attempts (not on the last attempt)
 		if i < maxRetries-1 {
 			delay := calculateExponentialBackoff(i, baseDelay)
-			time.Sleep(delay)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
 		}
 	}
 
-	// 4. Final Failure: Max attempts reached
+	// Final Failure: Max attempts reached
 	return nil, fmt.Errorf("failed to fetch job %s after %d retries: %w", jobID, maxRetries, ctx.Err())
 }
 
@@ -197,8 +260,8 @@ func (p *JobProcessor) processJobFile(ctx context.Context, job *storage.Job, job
 // function updates the status of a job or returns an error if the job is not recoverable
 func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, jobStatus storage.JobStatus) error {
 
-	const maxRetries = 3
-	const baseDelay = 10 * time.Second
+	const maxRetries = 4
+	const baseDelay = 1 * time.Second
 
 	for i := range maxRetries {
 
@@ -210,11 +273,18 @@ func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, 
 
 		log.Printf("Retrying failed job %s, (attempt %d). With error: %v", jobID, i+1, err)
 
-		time.Sleep(time.Duration(calculateExponentialBackoff(i, baseDelay)))
-
+		if i < maxRetries-1 {
+			delay := calculateExponentialBackoff(i, baseDelay)
+			select {
+			case <-ctx.Done():
+				return ctx.Err() // Propagate cancellation immediately
+			case <-time.After(delay):
+				// continue to next attempt
+			}
+		}
 	}
 
-	return fmt.Errorf("failed to fetch job %s after %d retries", jobID, maxRetries)
+	return fmt.Errorf("failed to update job status for job %s after %d retries", jobID, maxRetries)
 }
 
 //	the final step to processing a job
@@ -222,7 +292,7 @@ func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, 
 // saves results of the job or returns an error if not recoverable
 func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID, embeddings []float32) error {
 
-	const maxRetries = 3
+	const maxRetries = 4
 
 	const baseDelay = 10 * time.Second
 
@@ -241,11 +311,18 @@ func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID
 		slog.Warn("error saving embedding, retrying...",
 			"jobID", jobID, "attempt", i+1, "error", err)
 
-		if i < maxRetries - 1 {
-			time.Sleep(calculateExponentialBackoff(i, baseDelay))
-		}
-		}
+		if i < maxRetries-1 {
+			delay := calculateExponentialBackoff(i, baseDelay)
 
+			select {
+
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(delay):
+
+			}
+		}
+	}
 	return fmt.Errorf("failed to save embedding for job %s after %d retries", jobID, maxRetries)
 
 }
@@ -257,7 +334,7 @@ func isRetryable(err error) bool {
 	}
 
 	// do not retry unrecoverable errors
-	if errors.Is(err, ErrPermanentFailure) { 
+	if errors.Is(err, ErrPermanentFailure) {
 		return false
 	}
 
