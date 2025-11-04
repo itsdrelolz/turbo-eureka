@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	// pool required in order to handle concurrent access
-	"job-matcher/internal/storage"
 	apperrors "job-matcher/internal/errors"
+	"job-matcher/internal/storage"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,49 +21,60 @@ type Store struct {
 	Pool *pgxpool.Pool
 }
 
-
 func New(ctx context.Context, connString string) (*Store, error) {
-    if connString == "" {
-        return nil, fmt.Errorf("database connection string is required")
-    }
+	if connString == "" {
+		return nil, fmt.Errorf("database connection string is required")
+	}
 
-    // Configure connection to register pgvector types automatically
-    config, err := pgxpool.ParseConfig(connString)
-    if err != nil {
-        return nil, fmt.Errorf("failed to parse database config: %w", err)
-    }
+	// Configure connection to register pgvector types automatically
+	config, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse database config: %w", err)
+	}
 
-    // Register pgvector types on connect
-    config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-        // Register pgvector data type with the connection
-        if err := pgxvec.RegisterTypes(ctx, conn); err != nil {
-            return fmt.Errorf("failed to register pgvector types: %w", err)
-        }
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
+		if err != nil {
+			return fmt.Errorf("failed to enable pgvector extension: %w", err)
+		}
 
-        // Ensure the vector extension exists
-        _, err := conn.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
-        if err != nil {
-            return fmt.Errorf("failed to enable pgvector extension: %w", err)
-        }
+		if err := pgxvec.RegisterTypes(ctx, conn); err != nil {
+			return fmt.Errorf("failed to register pgvector types: %w", err)
+		}
 
-        return nil
-    }
+		return nil
+	}
 
-    pool, err := pgxpool.NewWithConfig(ctx, config)
-    if err != nil {
-        return nil, fmt.Errorf("unable to create connection pool: %w", err)
-    }
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create connection pool: %w", err)
+	}
 
-    if err := pool.Ping(ctx); err != nil {
-        return nil, fmt.Errorf("unable to ping database: %w", err)
-    }
+	if err := pool.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("unable to ping database: %w", err)
+	}
 
-    return &Store{Pool: pool}, nil
+	return &Store{Pool: pool}, nil
 }
-
 
 func (s *Store) Close() {
 	s.Pool.Close()
+}
+
+func stringToJobStatus(s string) (storage.JobStatus, error) {
+	switch s {
+	case "queued":
+		return storage.Queued, nil
+	case "processing":
+		return storage.Processing, nil
+	case "completed":
+		return storage.Completed, nil
+	case "failed":
+		return storage.Failed, nil
+	default:
+		// Return a default and an error
+		return storage.Failed, fmt.Errorf("unknown job status string: %s", s)
+	}
 }
 
 func (s *Store) InsertJobReturnID(ctx context.Context, fileName string, jobStatus storage.JobStatus) (uuid.UUID, error) {
@@ -94,6 +105,8 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 
 	var retrievedJob storage.Job
 
+	var statusString string
+
 	sql := `
         SELECT id, job_status, file_name, created_at
         FROM jobs
@@ -104,7 +117,12 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 		ctx,
 		sql,
 		jobID,
-	).Scan(&retrievedJob.ID, &retrievedJob.JobStatus, &retrievedJob.FileUrl, &retrievedJob.CreatedAt)
+	).Scan(
+		&retrievedJob.ID,
+		&statusString,
+		&retrievedJob.FileUrl,
+		&retrievedJob.CreatedAt,
+	)
 
 	var notFoundErr *pgconn.PgError
 
@@ -115,6 +133,13 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 	if err != nil {
 		return &storage.Job{}, fmt.Errorf("Failed to retrieve job with error: %w", err)
 	}
+
+	jobStatus, err := stringToJobStatus(statusString)
+
+	if err != nil {
+		return nil, fmt.Errorf("database contains invalid job status string: %w", err)
+	}
+	retrievedJob.JobStatus = jobStatus
 
 	return &retrievedJob, nil
 
@@ -153,7 +178,7 @@ func (s *Store) SetEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeE
 
 	sql := `
 		UPDATE jobs
-		SET vector = $1
+		SET embedding = $1
 		WHERE id = $2
 		`
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/joho/godotenv"
 	"job-matcher/internal/geministore"
 	"job-matcher/internal/postgresdb"
 	"job-matcher/internal/processor"
@@ -14,6 +15,11 @@ import (
 )
 
 func main() {
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 
 	ctx := context.Background()
 	postgresDB, err := postgresdb.New(ctx, os.Getenv("DATABASE_URL"))
@@ -51,17 +57,17 @@ func main() {
 
 	gemini, err := geministore.New(ctx, os.Getenv("GEMINI_API_KEY"))
 
-	if err != nil { 
+	if err != nil {
 		log.Fatalf("no gemini API key given")
 	}
 
 	workerQueue := processor.NewJobProcessor(
-		postgresDB, 
-		valkeyQueue, 
-		s3Store, 
-		bucketName, 
+		postgresDB,
+		valkeyQueue,
+		s3Store,
+		bucketName,
 		gemini,
-		)
+	)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -73,8 +79,7 @@ func main() {
 	// Wait for shutdown signal
 	<-sigChan
 	log.Println("Shutdown signal received, stopping workers...")
-	cancel() 
+	cancel()
 
 	log.Println("Worker shutdown complete")
 }
-

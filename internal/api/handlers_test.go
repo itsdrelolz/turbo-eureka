@@ -26,7 +26,6 @@ func TestHandleUploadResume_Success(t *testing.T) {
 	mockQueue := new(mocks.MockJobProducer)
 	mockStore := new(mocks.MockFileStorer)
 
-
 	mockStore.On("Upload", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	mockDB.On("InsertJobReturnID", mock.Anything, mock.Anything, mock.Anything).Return(expectedDBResult, nil)

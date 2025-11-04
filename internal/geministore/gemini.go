@@ -2,8 +2,8 @@ package geministore
 
 import (
 	"context"
-	apperrors "job-matcher/internal/errors"
 	"fmt"
+	apperrors "job-matcher/internal/errors"
 
 	"google.golang.org/genai"
 	"google.golang.org/grpc/codes"
@@ -29,18 +29,19 @@ func New(ctx context.Context, apiKey string) (*GeminiClient, error) {
 
 func (g *GeminiClient) ExtractText(ctx context.Context, resume []byte) (string, error) {
 
-	contents := []*genai.Content{
-		genai.NewContentFromBytes(resume, "application/pdf", genai.RoleUser),
+	prompt := "Extract all text from the provided resume. Respond ONLY with the extracted text, with no additional commentary or formatting."
+
+	parts := []*genai.Part{
+		{Text: prompt},
+		{InlineData: &genai.Blob{Data: resume, MIMEType: "application/pdf"}},
 	}
 
-
-	result, err := g.Client.Models.GenerateContent(
-		ctx,
+	content := &genai.Content{Parts: parts}
+	resp, err := g.Client.Models.GenerateContent(ctx,
 		"gemini-2.5-flash",
-		contents,
+		[]*genai.Content{content},
 		nil,
 	)
-
 	if err != nil {
 		st, ok := status.FromError(err)
 
@@ -59,7 +60,7 @@ func (g *GeminiClient) ExtractText(ctx context.Context, resume []byte) (string, 
 		return "", fmt.Errorf("Failed to extract text from resume with: %w", err)
 	}
 
-	return result.Text(), nil
+	return resp.Text(), nil
 
 }
 
@@ -74,7 +75,7 @@ func (g *GeminiClient) Embed(ctx context.Context, resumeText string) ([]float32,
 	result, err := g.Client.Models.EmbedContent(ctx,
 		"gemini-embedding-001",
 		contents,
-	&genai.EmbedContentConfig{OutputDimensionality: &outputDim},
+		&genai.EmbedContentConfig{OutputDimensionality: &outputDim},
 	)
 	if err != nil {
 

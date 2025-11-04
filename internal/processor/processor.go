@@ -4,17 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	apperrors "job-matcher/internal/errors"
 	"job-matcher/internal/gemini"
 	"job-matcher/internal/objectstore"
-	"job-matcher/internal/storage"
 	"job-matcher/internal/queue"
+	"job-matcher/internal/storage"
 	"log"
 	"log/slog"
 	"math"
 	"os"
 	"sync"
 	"time"
-	apperrors "job-matcher/internal/errors"
 
 	"github.com/google/uuid"
 )
@@ -22,8 +22,6 @@ import (
 // Set number of workers
 
 const numWorkers = 5
-
-
 
 type JobProcessor struct {
 	db       storage.JobStore
@@ -98,7 +96,6 @@ func (p *JobProcessor) Run(ctx context.Context) {
 	// separate go routine just for consuming jobs.
 	go p.startConsumer(ctx, jobsChan)
 
-
 	// starts the set amount of workers
 	for i := 1; i <= numWorkers; i++ {
 
@@ -128,7 +125,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 
 	// hard timelimit set for the completion of the job
 	// updating a jobs status to failed or completed bypasses this limit
-	const totalJobTimeout = 30 * time.Second
+	const totalJobTimeout = 2 * time.Minute
 	jobCtx, cancel := context.WithTimeout(ctx, totalJobTimeout)
 	defer cancel()
 
@@ -170,8 +167,6 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 	} else {
 		log.Printf("Job %s completed successfully.", jobID)
 	}
-
-	log.Printf("Job %s completed successfully.", jobID)
 
 }
 
