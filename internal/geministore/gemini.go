@@ -29,17 +29,24 @@ func New(ctx context.Context, apiKey string) (*GeminiClient, error) {
 
 func (g *GeminiClient) ExtractText(ctx context.Context, resume []byte) (string, error) {
 
-	contents := []*genai.Content{
-		genai.NewContentFromBytes(resume, "application/pdf", genai.RoleUser),
+	prompt := "Extract all text from the provided resume. Respond ONLY with the extracted text, with no additional commentary or formatting."
+
+	parts := []*genai.Part{
+		{Text: prompt},
+		{InlineData: &genai.Blob{Data: resume, MIMEType: "application/pdf"}},
 	}
 
+<<<<<<< HEAD
 	result, err := g.Client.Models.GenerateContent(
 		ctx,
+=======
+	content := &genai.Content{Parts: parts}
+	resp, err := g.Client.Models.GenerateContent(ctx,
+>>>>>>> feature/workers
 		"gemini-2.5-flash",
-		contents,
+		[]*genai.Content{content},
 		nil,
 	)
-
 	if err != nil {
 		st, ok := status.FromError(err)
 
@@ -58,7 +65,7 @@ func (g *GeminiClient) ExtractText(ctx context.Context, resume []byte) (string, 
 		return "", fmt.Errorf("Failed to extract text from resume with: %w", err)
 	}
 
-	return result.Text(), nil
+	return resp.Text(), nil
 
 }
 

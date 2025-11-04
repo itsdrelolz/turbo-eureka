@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/joho/godotenv"
 	"job-matcher/internal/geministore"
 	"job-matcher/internal/postgresdb"
 	"job-matcher/internal/processor"
@@ -14,6 +15,11 @@ import (
 )
 
 func main() {
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 
 	ctx := context.Background()
 	postgresDB, err := postgresdb.New(ctx, os.Getenv("DATABASE_URL"))

@@ -32,6 +32,7 @@ func New(ctx context.Context, connString string) (*Store, error) {
 		return nil, fmt.Errorf("failed to parse database config: %w", err)
 	}
 
+<<<<<<< HEAD
 	// Register pgvector types on connect
 	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		// Register pgvector data type with the connection
@@ -43,6 +44,16 @@ func New(ctx context.Context, connString string) (*Store, error) {
 		_, err := conn.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
 		if err != nil {
 			return fmt.Errorf("failed to enable pgvector extension: %w", err)
+=======
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
+		if err != nil {
+			return fmt.Errorf("failed to enable pgvector extension: %w", err)
+		}
+
+		if err := pgxvec.RegisterTypes(ctx, conn); err != nil {
+			return fmt.Errorf("failed to register pgvector types: %w", err)
+>>>>>>> feature/workers
 		}
 
 		return nil
@@ -64,12 +75,28 @@ func (s *Store) Close() {
 	s.Pool.Close()
 }
 
-func (s *Store) InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus storage.JobStatus) (uuid.UUID, error) {
+func stringToJobStatus(s string) (storage.JobStatus, error) {
+	switch s {
+	case "queued":
+		return storage.Queued, nil
+	case "processing":
+		return storage.Processing, nil
+	case "completed":
+		return storage.Completed, nil
+	case "failed":
+		return storage.Failed, nil
+	default:
+		// Return a default and an error
+		return storage.Failed, fmt.Errorf("unknown job status string: %s", s)
+	}
+}
+
+func (s *Store) InsertJobReturnID(ctx context.Context, fileName string, jobStatus storage.JobStatus) (uuid.UUID, error) {
 
 	var newId uuid.UUID
 
 	sql := `
-		INSERT into jobs (file_url, job_status)
+		INSERT into jobs (file_name, job_status)
 		VALUES ($1, $2)
 		RETURNING id
 		`
@@ -77,7 +104,7 @@ func (s *Store) InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus
 	err := s.Pool.QueryRow(
 		ctx,
 		sql,
-		fileUrl,
+		fileName,
 		jobStatus.String(),
 	).Scan(&newId)
 
@@ -92,8 +119,10 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 
 	var retrievedJob storage.Job
 
+	var statusString string
+
 	sql := `
-        SELECT id, job_status, file_url, created_at
+        SELECT id, job_status, file_name, created_at
         FROM jobs
         WHERE id = $1
         `
@@ -102,7 +131,12 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 		ctx,
 		sql,
 		jobID,
-	).Scan(&retrievedJob.ID, &retrievedJob.JobStatus, &retrievedJob.FileUrl, &retrievedJob.CreatedAt)
+	).Scan(
+		&retrievedJob.ID,
+		&statusString,
+		&retrievedJob.FileUrl,
+		&retrievedJob.CreatedAt,
+	)
 
 	var notFoundErr *pgconn.PgError
 
@@ -113,6 +147,13 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 	if err != nil {
 		return &storage.Job{}, fmt.Errorf("Failed to retrieve job with error: %w", err)
 	}
+
+	jobStatus, err := stringToJobStatus(statusString)
+
+	if err != nil {
+		return nil, fmt.Errorf("database contains invalid job status string: %w", err)
+	}
+	retrievedJob.JobStatus = jobStatus
 
 	return &retrievedJob, nil
 
@@ -151,7 +192,7 @@ func (s *Store) SetEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeE
 
 	sql := `
 		UPDATE jobs
-		SET vector = $1
+		SET embedding = $1
 		WHERE id = $2
 		`
 

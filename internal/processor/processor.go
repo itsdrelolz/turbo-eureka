@@ -125,7 +125,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 
 	// hard timelimit set for the completion of the job
 	// updating a jobs status to failed or completed bypasses this limit
-	const totalJobTimeout = 30 * time.Second
+	const totalJobTimeout = 2 * time.Minute
 	jobCtx, cancel := context.WithTimeout(ctx, totalJobTimeout)
 	defer cancel()
 
@@ -167,8 +167,6 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 	} else {
 		log.Printf("Job %s completed successfully.", jobID)
 	}
-
-	log.Printf("Job %s completed successfully.", jobID)
 
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/joho/godotenv"
 	"job-matcher/internal/api"
 	"job-matcher/internal/postgresdb"
 	"job-matcher/internal/s3"
@@ -13,6 +14,10 @@ import (
 
 func main() {
 
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 	ctx := context.Background()
 	postgresDB, err := postgresdb.New(ctx, os.Getenv("DATABASE_URL"))
 
@@ -53,5 +58,5 @@ func main() {
 
 	router := api.NewRouter(apiHandler)
 
-	http.ListenAndServe("8080", router)
+	http.ListenAndServe(":8080", router)
 }
