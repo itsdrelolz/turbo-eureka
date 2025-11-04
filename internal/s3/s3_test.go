@@ -14,9 +14,9 @@ func setUpS3(t *testing.T) (*s3.FileStore, string) {
 	t.Helper()
 
 	// Get configuration from environment variables
-	endpoint := os.Getenv("S3_ENDPOINT")
-	accessKey := os.Getenv("S3_ACCESS_KEY_ID")
-	secretKey := os.Getenv("S3_SECRET_ACCESS_KEY")
+	endpoint := os.Getenv("S3_ENDPOINT_URL")
+	accessKey := os.Getenv("S3_ACCESS_KEY")
+	secretKey := os.Getenv("S3_SECRET_KEY")
 	bucket := os.Getenv("S3_BUCKET_NAME")
 
 	if endpoint == "" || accessKey == "" || secretKey == "" {

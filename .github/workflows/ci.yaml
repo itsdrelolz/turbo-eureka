@@ -38,9 +38,15 @@ jobs:
     - name: Run tests (including integration)
       env:
         DATABASE_URL: postgres://postgres:password@localhost:5433/testdb?sslmode=disable
-        VALKEY_ADDR: localhost:6380
+        VALKEY_URL: localhost:6380
         VALKEY_PASSWORD: mysecretpassword
+        S3_ENDPOINT_URL: http://localhost:9000
+        S3_REGION: us-east-1
+        S3_ACCESS_KEY: minioadmin
+        S3_SECRET_KEY: minioadmin
+        S3_BUCKET_NAME: resume-bucket
         INTEGRATION_TEST: true    
+
         run: go test -v ./...
 
     - name: Build
