@@ -36,13 +36,8 @@ func (g *GeminiClient) ExtractText(ctx context.Context, resume []byte) (string, 
 		{InlineData: &genai.Blob{Data: resume, MIMEType: "application/pdf"}},
 	}
 
-<<<<<<< HEAD
-	result, err := g.Client.Models.GenerateContent(
-		ctx,
-=======
 	content := &genai.Content{Parts: parts}
 	resp, err := g.Client.Models.GenerateContent(ctx,
->>>>>>> feature/workers
 		"gemini-2.5-flash",
 		[]*genai.Content{content},
 		nil,

@@ -32,19 +32,6 @@ func New(ctx context.Context, connString string) (*Store, error) {
 		return nil, fmt.Errorf("failed to parse database config: %w", err)
 	}
 
-<<<<<<< HEAD
-	// Register pgvector types on connect
-	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-		// Register pgvector data type with the connection
-		if err := pgxvec.RegisterTypes(ctx, conn); err != nil {
-			return fmt.Errorf("failed to register pgvector types: %w", err)
-		}
-
-		// Ensure the vector extension exists
-		_, err := conn.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
-		if err != nil {
-			return fmt.Errorf("failed to enable pgvector extension: %w", err)
-=======
 	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		_, err := conn.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
 		if err != nil {
@@ -53,7 +40,6 @@ func New(ctx context.Context, connString string) (*Store, error) {
 
 		if err := pgxvec.RegisterTypes(ctx, conn); err != nil {
 			return fmt.Errorf("failed to register pgvector types: %w", err)
->>>>>>> feature/workers
 		}
 
 		return nil
