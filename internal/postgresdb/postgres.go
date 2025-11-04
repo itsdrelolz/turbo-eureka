@@ -4,36 +4,63 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	// pool required in order to handle concurrent access
+	"job-matcher/internal/storage"
+	apperrors "job-matcher/internal/errors"
+
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"job-matcher/internal/storage"
+	"github.com/pgvector/pgvector-go"
+	pgxvec "github.com/pgvector/pgvector-go/pgx"
 )
 
 type Store struct {
 	Pool *pgxpool.Pool
 }
 
+
 func New(ctx context.Context, connString string) (*Store, error) {
+    if connString == "" {
+        return nil, fmt.Errorf("database connection string is required")
+    }
 
-	if connString == "" {
-		return nil, fmt.Errorf("database connection string is required")
-	}
+    // Configure connection to register pgvector types automatically
+    config, err := pgxpool.ParseConfig(connString)
+    if err != nil {
+        return nil, fmt.Errorf("failed to parse database config: %w", err)
+    }
 
-	pool, err := pgxpool.New(ctx, connString)
+    // Register pgvector types on connect
+    config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+        // Register pgvector data type with the connection
+        if err := pgxvec.RegisterTypes(ctx, conn); err != nil {
+            return fmt.Errorf("failed to register pgvector types: %w", err)
+        }
 
-	if err != nil {
-		return nil, fmt.Errorf("unable to create connection: %w", err)
-	}
+        // Ensure the vector extension exists
+        _, err := conn.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
+        if err != nil {
+            return fmt.Errorf("failed to enable pgvector extension: %w", err)
+        }
 
-	if err := pool.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("unable to ping database: %w", err)
-	}
+        return nil
+    }
 
-	return &Store{Pool: pool}, nil
+    pool, err := pgxpool.NewWithConfig(ctx, config)
+    if err != nil {
+        return nil, fmt.Errorf("unable to create connection pool: %w", err)
+    }
 
+    if err := pool.Ping(ctx); err != nil {
+        return nil, fmt.Errorf("unable to ping database: %w", err)
+    }
+
+    return &Store{Pool: pool}, nil
 }
+
 
 func (s *Store) Close() {
 	s.Pool.Close()
@@ -82,7 +109,7 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 	var notFoundErr *pgconn.PgError
 
 	if errors.As(err, &notFoundErr) {
-		return nil, fmt.Errorf("Row not inserted in DB (404): %w", ErrPermananentFailure)
+		return nil, fmt.Errorf("Row not inserted in DB (404): %w", apperrors.ErrPermanentFailure)
 	}
 
 	if err != nil {
@@ -96,7 +123,7 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 func (s *Store) UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus storage.JobStatus) error {
 
 	sql := `
-	UPDATE job
+	UPDATE jobs
 	SET job_status = $1
 	WHERE id = $2
 	`
@@ -111,7 +138,7 @@ func (s *Store) UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus 
 	var notFoundErr *pgconn.PgError
 
 	if errors.As(err, &notFoundErr) {
-		return fmt.Errorf("Job not found (404): %w", ErrPermanentFailure)
+		return fmt.Errorf("Job not found (404): %w", apperrors.ErrPermanentFailure)
 	}
 
 	if err != nil {
@@ -126,21 +153,21 @@ func (s *Store) SetEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeE
 
 	sql := `
 		UPDATE jobs
-		SET embedding = $1
+		SET vector = $1
 		WHERE id = $2
 		`
 
 	_, err := s.Pool.Exec(
 		ctx,
 		sql,
+		pgvector.NewVector(resumeEmbedding),
 		jobID,
-		resumeEmbedding,
 	)
 
 	var notFoundErr *pgconn.PgError
 
 	if errors.As(err, &notFoundErr) {
-		return fmt.Errorf("Embedding row not found (404): %w", ErrPermanentFailure)
+		return fmt.Errorf("Embedding row not found (404): %w", apperrors.ErrPermanentFailure)
 	}
 
 	if err != nil {

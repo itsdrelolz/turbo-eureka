@@ -71,20 +71,22 @@ func (g *GeminiClient) Embed(ctx context.Context, resumeText string) ([]float32,
 		genai.NewContentFromText(resumeText, genai.RoleUser),
 	}
 
+	outputDim := int32(768)
+
 	result, err := g.Client.Models.EmbedContent(ctx,
 		"gemini-embedding-001",
 		contents,
-		nil,
+	&genai.EmbedContentConfig{OutputDimensionality: &outputDim},
 	)
 	if err != nil {
 
 		st, ok := status.FromError(err)
 		if ok {
-			// 🛑 Permanent Error Check 2: Bad credentials or bad input
+			//  Permanent Error Check 2: Bad credentials or bad input
 			switch st.Code() {
 			case codes.Unauthenticated, codes.PermissionDenied: // Invalid API key or scope
 				return nil, fmt.Errorf("gemini authentication failed: %w", ErrPermanentFailure)
-			case codes.InvalidArgument: // Bad input (e.g., file too big, invalid format)
+			case codes.InvalidArgument: // Bad input (ie. file too big, invalid format)
 				return nil, fmt.Errorf("gemini invalid input (400): %w", ErrPermanentFailure)
 			}
 		}

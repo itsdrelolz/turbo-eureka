@@ -9,8 +9,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/aws/smithy-go"
 	"io"
+	apperrors "job-matcher/internal/errors"
+
 )
 
 type FileStore struct {
@@ -48,7 +49,7 @@ func NewFileStore(ctx context.Context, conf S3Config) (*FileStore, error) {
 
 }
 
-func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, contentType string) (string, error) {
+func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, contentType string)  error {
 
 	_, err := fs.Client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
@@ -58,11 +59,9 @@ func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, co
 	})
 
 	if err != nil {
-		return "", fmt.Errorf("failed to upload file: %w", err)
+		 return fmt.Errorf("failed to upload file: %w", err)
 	}
-
-	location := fmt.Sprintf("https://%s.s3.amazonaws.com/%s", bucket, key)
-	return location, nil
+	return  nil
 }
 
 func (fs *FileStore) Download(ctx context.Context, bucket, key string) ([]byte, error) {
@@ -72,16 +71,11 @@ func (fs *FileStore) Download(ctx context.Context, bucket, key string) ([]byte, 
 		Key:    aws.String(key),
 	})
 	var notFoundErr *types.NotFound
-	var accessDenied *smithy.APIError
 
 	if errors.As(err, &notFoundErr) {
-		return nil, fmt.Errorf("file not found in s3 (404): %w", ErrPermanentFailure)
+		return nil, fmt.Errorf("file not found in s3 (404): %w", apperrors.ErrPermanentFailure)
 	}
 
-	if errors.As(err, &accessDenied) {
-		return nil, fmt.Errorf("access denied (403): %w", ErrPermanentFailure)
-
-	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to download file: %w", err)

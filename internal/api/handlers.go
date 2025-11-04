@@ -55,31 +55,27 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 
 	uniqueFileName := fmt.Sprintf("%s%s", uuid.New().String(), filepath.Ext(fileHeader.Filename))
 
-	outputURL, err := h.store.Upload(r.Context(), file, h.s3Bucket, uniqueFileName, "application/pdf")
+	err = h.store.Upload(r.Context(), file, h.s3Bucket, uniqueFileName, "application/pdf")
 
-	if outputURL == "" {
-		log.Println("ERROR: S3 upload output returned empty location.")
-		http.Error(w, "Internal server error during file upload", http.StatusInternalServerError)
-		return
+
+	if err != nil { 
+		fmt.Printf("Failed to upload file to s3", http.StatusInternalServerError)
+		return 
 	}
 
-	jobID, err := h.db.InsertJobReturnID(r.Context(), outputURL, storage.JobStatus(storage.Queued))
-
-	if !jobID.Valid {
-		http.Error(w, "Unable to find job status", http.StatusInternalServerError)
-		return
-	}
+	jobID, err := h.db.InsertJobReturnID(r.Context(), uniqueFileName, storage.JobStatus(storage.Queued))
 
 	if err != nil {
-		http.Error(w, "Failed to insert job into database", http.StatusInternalServerError)
-		return
+    		http.Error(w, "Failed to insert job into database", http.StatusInternalServerError)
+    		return
 	}
-	if !jobID.Valid {
-		http.Error(w, "Failed to create a valid job ID", http.StatusInternalServerError)
-		return
+	if jobID == uuid.Nil {
+    		http.Error(w, "Failed to create a valid job ID", http.StatusInternalServerError)
+    		return
 	}
 
-	jobIDString := jobID.UUID.String()
+
+	jobIDString := jobID.String()
 
 	err = h.queue.InsertJob(r.Context(), jobIDString)
 
@@ -90,6 +86,6 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	log.Printf("Job %s queued successfully at %s", jobIDString, outputURL)
+	log.Printf("Job %s queued successfully at %s", jobIDString, uniqueFileName)
 	json.NewEncoder(w).Encode(map[string]string{"jobId": jobIDString})
 }

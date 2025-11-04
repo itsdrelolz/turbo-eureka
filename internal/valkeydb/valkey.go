@@ -58,8 +58,8 @@ func (v *ValkeyClient) ConsumeJob(ctx context.Context) (string, error) {
 
 	arr, err := res.AsStrSlice()
 
-	if err != nil {
 
+	if err != nil {
 		return "", fmt.Errorf("failed to parse blocking right pop respose: %w", err)
 	}
 

@@ -13,6 +13,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	apperrors "job-matcher/internal/errors"
 
 	"github.com/google/uuid"
 )
@@ -21,8 +22,6 @@ import (
 
 const numWorkers = 5
 
-// indicates an unrecoverable error
-var ErrPermanentFailure = errors.New("permanent failure, do not retry")
 
 type JobFetcher interface {
 	ConsumeJob(ctx context.Context) (string, error)
@@ -149,7 +148,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 	resumeEmbedding, err := p.processJobFile(jobCtx, job, job.ID)
 
 	if err != nil {
-		if errors.Is(err, ErrPermanentFailure) {
+		if errors.Is(err, apperrors.ErrPermanentFailure) {
 			log.Printf("Fatal, non-retryable failure for job %s: %v. Marking as failed.", jobID, err)
 			p.db.UpdateJobStatus(context.Background(), jobID, storage.Failed)
 			return // End job execution instantly
@@ -334,7 +333,8 @@ func isRetryable(err error) bool {
 	}
 
 	// do not retry unrecoverable errors
-	if errors.Is(err, ErrPermanentFailure) {
+	if errors.Is(err, apperrors.ErrPermanentFailure) {
+
 		return false
 	}
 
