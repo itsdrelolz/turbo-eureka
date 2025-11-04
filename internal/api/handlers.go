@@ -19,13 +19,13 @@ import (
 // add job to redis
 
 type APIHandler struct {
-	db       storage.JobStore
-	queue    queue.JobQueuer
+	db       storage.JobCreator
+	queue    queue.JobProducer
 	store    objectstore.FileStorer
 	s3Bucket string
 }
 
-func NewAPIHandler(db storage.JobStore, queue queue.JobQueuer, store objectstore.FileStorer, s3Bucket string) *APIHandler {
+func NewAPIHandler(db storage.JobCreator, queue queue.JobProducer, store objectstore.FileStorer, s3Bucket string) *APIHandler {
 	return &APIHandler{
 		db:       db,
 		queue:    queue,
@@ -59,7 +59,7 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 
 
 	if err != nil { 
-		fmt.Printf("Failed to upload file to s3", http.StatusInternalServerError)
+		http.Error(w, "Failed to upload file to s3", http.StatusInternalServerError)
 		return 
 	}
 

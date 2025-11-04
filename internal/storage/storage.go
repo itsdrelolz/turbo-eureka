@@ -22,12 +22,24 @@ type Job struct {
 	CreatedAt time.Time
 }
 
-type JobStore interface {
+type JobCreator interface { 
 	InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus JobStatus) (uuid.UUID, error)
+}
+
+type JobUpdater interface {
 	JobByID(ctx context.Context, jobID uuid.UUID) (*Job, error)
 	UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus JobStatus) error
 	SetEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeEmbedding []float32) error
 }
+
+type JobStore interface {
+    JobCreator
+    JobUpdater
+}
+
+
+
+
 
 func (s JobStatus) String() string {
 	switch s {

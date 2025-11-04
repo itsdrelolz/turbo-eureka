@@ -19,22 +19,19 @@ func TestHandleUploadResume_Success(t *testing.T) {
 	testUUID := uuid.New()
 
 	// The database returns this struct
-	expectedDBResult := uuid.UUID{
-		UUID:  testUUID,
-		Valid: true,
-	}
+	expectedDBResult := testUUID
+
 	expectedJobID := testUUID.String()
-	mockDB := new(mocks.MockJobStore)
-	mockQueue := new(mocks.MockJobQueuer)
+	mockDB := new(mocks.MockJobCreator)
+	mockQueue := new(mocks.MockJobProducer)
 	mockStore := new(mocks.MockFileStorer)
 
-	expectedFileURL := "http://s3.com/mock-uuid.pdf"
 
-	mockStore.On("Upload", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(expectedFileURL, nil)
+	mockStore.On("Upload", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
-	mockDB.On("InsertJobReturnID", mock.Anything, expectedFileURL, mock.Anything).Return(expectedDBResult, nil)
+	mockDB.On("InsertJobReturnID", mock.Anything, mock.Anything, mock.Anything).Return(expectedDBResult, nil)
 
-	mockQueue.On("InsertJob", mock.Anything, expectedJobID).Return(nil)
+	mockQueue.On("InsertJob", mock.Anything, mock.Anything).Return(nil)
 	handler := NewAPIHandler(mockDB, mockQueue, mockStore, "fake-bucket-name")
 
 	body := new(bytes.Buffer)

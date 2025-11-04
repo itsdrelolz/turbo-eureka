@@ -7,6 +7,7 @@ import (
 	"job-matcher/internal/gemini"
 	"job-matcher/internal/objectstore"
 	"job-matcher/internal/storage"
+	"job-matcher/internal/queue"
 	"log"
 	"log/slog"
 	"math"
@@ -23,19 +24,16 @@ import (
 const numWorkers = 5
 
 
-type JobFetcher interface {
-	ConsumeJob(ctx context.Context) (string, error)
-}
 
 type JobProcessor struct {
 	db       storage.JobStore
-	queue    JobFetcher
-	store    objectstore.FileStorer
+	queue    queue.JobConsumer
+	store    objectstore.FileFetcher
 	s3Bucket string
 	gemini   gemini.ResumerParser
 }
 
-func NewJobProcessor(db storage.JobStore, queue JobFetcher, store objectstore.FileStorer, s3Bucket string, gemini gemini.ResumerParser) *JobProcessor {
+func NewJobProcessor(db storage.JobStore, queue queue.JobConsumer, store objectstore.FileFetcher, s3Bucket string, gemini gemini.ResumerParser) *JobProcessor {
 	return &JobProcessor{db: db, queue: queue, store: store, s3Bucket: s3Bucket, gemini: gemini}
 }
 

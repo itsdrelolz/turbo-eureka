@@ -4,15 +4,16 @@ services:
   test-db:
 
 
-    image: postgres:17-alpine
+    image: pgvector/pgvector:pg18-trixie
   
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=password
       - POSTGRES_DB=testdb
-
+ 
     ports: 
       - "5433:5432"
+
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 

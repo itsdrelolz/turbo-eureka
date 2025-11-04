@@ -11,12 +11,12 @@ func setUpTestDB(t *testing.T) *valkeydb.ValkeyClient {
 
 	t.Helper()
 
-	url := os.Getenv("VALKEY_TEST_URL")
+	url := os.Getenv("VALKEY_ADDR")
 	if url == "" {
 		t.Skip("VALKEY_TEST_URL not set, skipping integration test")
 	}
 
-	valkeypass := os.Getenv("VALKEY_TEST_PASSWORD")
+	valkeypass := os.Getenv("VALKEY_PASSWORD")
 	if valkeypass == "" {
 		t.Skip("VALKEY_PASSWORD not set, skipping integration test")
 	}

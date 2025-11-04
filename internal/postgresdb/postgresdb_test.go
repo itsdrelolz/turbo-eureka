@@ -6,13 +6,14 @@ import (
 	"job-matcher/internal/storage"
 	"os"
 	"testing"
+	"github.com/google/uuid"
 )
 
 func setUpTestDB(t *testing.T) *postgresdb.Store {
 
 	t.Helper()
 
-	connString := os.Getenv("DB_TEST_URL")
+	connString := os.Getenv("DATABASE_URL")
 
 	if connString == "" {
 		t.Skip("DB_TEST_URL not set, skipping integration test")
@@ -55,7 +56,7 @@ func TestInsertJobAndGetIDSuccess(t *testing.T) {
 		t.Fatalf("InsertJobID() returned an unexpected error: %v", err)
 	}
 
-	if !jobID.Valid {
+	if err := uuid.Validate(jobID.String()); err != nil {
 		t.Fatalf("InsertJobID() returned an invalid ID: got %v, want a non-empty string", jobID)
 	}
 

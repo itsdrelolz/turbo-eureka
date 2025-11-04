@@ -36,7 +36,6 @@ func main() {
 		SecretKey:   os.Getenv("S3_SECRET_KEY"),
 	}
 
-	// 2. Create the FileStore
 	s3Store, err := s3.NewFileStore(ctx, s3Conf)
 
 	if err != nil {
