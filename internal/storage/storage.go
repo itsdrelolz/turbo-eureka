@@ -22,7 +22,7 @@ type Job struct {
 	CreatedAt time.Time
 }
 
-type JobCreator interface { 
+type JobCreator interface {
 	InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus JobStatus) (uuid.UUID, error)
 }
 
@@ -33,13 +33,9 @@ type JobUpdater interface {
 }
 
 type JobStore interface {
-    JobCreator
-    JobUpdater
+	JobCreator
+	JobUpdater
 }
-
-
-
-
 
 func (s JobStatus) String() string {
 	switch s {

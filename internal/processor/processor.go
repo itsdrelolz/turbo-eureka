@@ -4,17 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	apperrors "job-matcher/internal/errors"
 	"job-matcher/internal/gemini"
 	"job-matcher/internal/objectstore"
-	"job-matcher/internal/storage"
 	"job-matcher/internal/queue"
+	"job-matcher/internal/storage"
 	"log"
 	"log/slog"
 	"math"
 	"os"
 	"sync"
 	"time"
-	apperrors "job-matcher/internal/errors"
 
 	"github.com/google/uuid"
 )
@@ -22,8 +22,6 @@ import (
 // Set number of workers
 
 const numWorkers = 5
-
-
 
 type JobProcessor struct {
 	db       storage.JobStore
@@ -97,7 +95,6 @@ func (p *JobProcessor) Run(ctx context.Context) {
 
 	// separate go routine just for consuming jobs.
 	go p.startConsumer(ctx, jobsChan)
-
 
 	// starts the set amount of workers
 	for i := 1; i <= numWorkers; i++ {

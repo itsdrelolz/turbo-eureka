@@ -2,8 +2,8 @@ package geministore
 
 import (
 	"context"
-	apperrors "job-matcher/internal/errors"
 	"fmt"
+	apperrors "job-matcher/internal/errors"
 
 	"google.golang.org/genai"
 	"google.golang.org/grpc/codes"
@@ -32,7 +32,6 @@ func (g *GeminiClient) ExtractText(ctx context.Context, resume []byte) (string, 
 	contents := []*genai.Content{
 		genai.NewContentFromBytes(resume, "application/pdf", genai.RoleUser),
 	}
-
 
 	result, err := g.Client.Models.GenerateContent(
 		ctx,
@@ -74,7 +73,7 @@ func (g *GeminiClient) Embed(ctx context.Context, resumeText string) ([]float32,
 	result, err := g.Client.Models.EmbedContent(ctx,
 		"gemini-embedding-001",
 		contents,
-	&genai.EmbedContentConfig{OutputDimensionality: &outputDim},
+		&genai.EmbedContentConfig{OutputDimensionality: &outputDim},
 	)
 	if err != nil {
 

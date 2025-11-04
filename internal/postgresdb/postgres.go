@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	// pool required in order to handle concurrent access
-	"job-matcher/internal/storage"
 	apperrors "job-matcher/internal/errors"
+	"job-matcher/internal/storage"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,46 +21,44 @@ type Store struct {
 	Pool *pgxpool.Pool
 }
 
-
 func New(ctx context.Context, connString string) (*Store, error) {
-    if connString == "" {
-        return nil, fmt.Errorf("database connection string is required")
-    }
+	if connString == "" {
+		return nil, fmt.Errorf("database connection string is required")
+	}
 
-    // Configure connection to register pgvector types automatically
-    config, err := pgxpool.ParseConfig(connString)
-    if err != nil {
-        return nil, fmt.Errorf("failed to parse database config: %w", err)
-    }
+	// Configure connection to register pgvector types automatically
+	config, err := pgxpool.ParseConfig(connString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse database config: %w", err)
+	}
 
-    // Register pgvector types on connect
-    config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-        // Register pgvector data type with the connection
-        if err := pgxvec.RegisterTypes(ctx, conn); err != nil {
-            return fmt.Errorf("failed to register pgvector types: %w", err)
-        }
+	// Register pgvector types on connect
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		// Register pgvector data type with the connection
+		if err := pgxvec.RegisterTypes(ctx, conn); err != nil {
+			return fmt.Errorf("failed to register pgvector types: %w", err)
+		}
 
-        // Ensure the vector extension exists
-        _, err := conn.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
-        if err != nil {
-            return fmt.Errorf("failed to enable pgvector extension: %w", err)
-        }
+		// Ensure the vector extension exists
+		_, err := conn.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
+		if err != nil {
+			return fmt.Errorf("failed to enable pgvector extension: %w", err)
+		}
 
-        return nil
-    }
+		return nil
+	}
 
-    pool, err := pgxpool.NewWithConfig(ctx, config)
-    if err != nil {
-        return nil, fmt.Errorf("unable to create connection pool: %w", err)
-    }
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create connection pool: %w", err)
+	}
 
-    if err := pool.Ping(ctx); err != nil {
-        return nil, fmt.Errorf("unable to ping database: %w", err)
-    }
+	if err := pool.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("unable to ping database: %w", err)
+	}
 
-    return &Store{Pool: pool}, nil
+	return &Store{Pool: pool}, nil
 }
-
 
 func (s *Store) Close() {
 	s.Pool.Close()

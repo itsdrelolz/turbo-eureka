@@ -51,17 +51,17 @@ func main() {
 
 	gemini, err := geministore.New(ctx, os.Getenv("GEMINI_API_KEY"))
 
-	if err != nil { 
+	if err != nil {
 		log.Fatalf("no gemini API key given")
 	}
 
 	workerQueue := processor.NewJobProcessor(
-		postgresDB, 
-		valkeyQueue, 
-		s3Store, 
-		bucketName, 
+		postgresDB,
+		valkeyQueue,
+		s3Store,
+		bucketName,
 		gemini,
-		)
+	)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -73,8 +73,7 @@ func main() {
 	// Wait for shutdown signal
 	<-sigChan
 	log.Println("Shutdown signal received, stopping workers...")
-	cancel() 
+	cancel()
 
 	log.Println("Worker shutdown complete")
 }
-

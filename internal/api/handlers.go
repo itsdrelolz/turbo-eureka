@@ -57,23 +57,21 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 
 	err = h.store.Upload(r.Context(), file, h.s3Bucket, uniqueFileName, "application/pdf")
 
-
-	if err != nil { 
+	if err != nil {
 		http.Error(w, "Failed to upload file to s3", http.StatusInternalServerError)
-		return 
+		return
 	}
 
 	jobID, err := h.db.InsertJobReturnID(r.Context(), uniqueFileName, storage.JobStatus(storage.Queued))
 
 	if err != nil {
-    		http.Error(w, "Failed to insert job into database", http.StatusInternalServerError)
-    		return
+		http.Error(w, "Failed to insert job into database", http.StatusInternalServerError)
+		return
 	}
 	if jobID == uuid.Nil {
-    		http.Error(w, "Failed to create a valid job ID", http.StatusInternalServerError)
-    		return
+		http.Error(w, "Failed to create a valid job ID", http.StatusInternalServerError)
+		return
 	}
-
 
 	jobIDString := jobID.String()
 

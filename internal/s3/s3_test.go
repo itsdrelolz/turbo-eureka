@@ -58,11 +58,10 @@ func TestUploadSuccess(t *testing.T) {
 	contentType := "application/pdf"
 
 	// Upload file
-	 err := s3Store.Upload(ctx, fileReader, bucket, key, contentType)
+	err := s3Store.Upload(ctx, fileReader, bucket, key, contentType)
 	if err != nil {
 		t.Fatalf("Failed to upload file: %v", err)
 	}
-
 
 	t.Logf("Successfully uploaded file: %s", mockPDFContent)
 }
@@ -94,7 +93,7 @@ func TestUploadMultiplePDFs(t *testing.T) {
 			fileReader := bytes.NewReader([]byte(tc.content))
 			key := "test-resumes/" + tc.name + "-" + uuid.New().String() + ".pdf"
 
-			 err := s3Store.Upload(ctx, fileReader, bucket, key, tc.contentType)
+			err := s3Store.Upload(ctx, fileReader, bucket, key, tc.contentType)
 			if err != nil {
 				t.Errorf("Failed to upload %s: %v", tc.name, err)
 			}
@@ -113,7 +112,7 @@ func TestUploadInvalidBucket(t *testing.T) {
 	invalidBucket := "non-existent-bucket-" + uuid.New().String()
 	key := "test-file.pdf"
 
-	 err := s3Store.Upload(ctx, fileReader, invalidBucket, key, "application/pdf")
+	err := s3Store.Upload(ctx, fileReader, invalidBucket, key, "application/pdf")
 	if err == nil {
 		t.Error("Expected error when uploading to non-existent bucket, got nil")
 	}
@@ -123,15 +122,15 @@ func TestUploadInvalidBucket(t *testing.T) {
 
 // TestUploadEmptyFile tests uploading an empty PDF
 //func TestUploadEmptyFile(t *testing.T) {
-	//s3Store, bucket := setUpS3(t)
-	//ctx := context.Background()
+//s3Store, bucket := setUpS3(t)
+//ctx := context.Background()
 
-	// Empty reader
-	//fileReader := bytes.NewReader([]byte{})
-	//key := "test-resumes/empty-" + uuid.New().String() + ".pdf"
+// Empty reader
+//fileReader := bytes.NewReader([]byte{})
+//key := "test-resumes/empty-" + uuid.New().String() + ".pdf"
 
-	//err := s3Store.Upload(ctx, fileReader, bucket, key, "application/pdf")
-	//if err == nil {
-		//t.Error("Expected error when uploading an empty file, got nil")
-	//}
+//err := s3Store.Upload(ctx, fileReader, bucket, key, "application/pdf")
+//if err == nil {
+//t.Error("Expected error when uploading an empty file, got nil")
+//}
 //}

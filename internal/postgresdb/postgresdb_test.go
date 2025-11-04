@@ -2,11 +2,11 @@ package postgresdb_test
 
 import (
 	"context"
+	"github.com/google/uuid"
 	"job-matcher/internal/postgresdb"
 	"job-matcher/internal/storage"
 	"os"
 	"testing"
-	"github.com/google/uuid"
 )
 
 func setUpTestDB(t *testing.T) *postgresdb.Store {
