@@ -66,12 +66,12 @@ func (s *Store) Close() {
 	s.Pool.Close()
 }
 
-func (s *Store) InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus storage.JobStatus) (uuid.UUID, error) {
+func (s *Store) InsertJobReturnID(ctx context.Context, fileName string, jobStatus storage.JobStatus) (uuid.UUID, error) {
 
 	var newId uuid.UUID
 
 	sql := `
-		INSERT into jobs (file_url, job_status)
+		INSERT into jobs (file_name, job_status)
 		VALUES ($1, $2)
 		RETURNING id
 		`
@@ -79,7 +79,7 @@ func (s *Store) InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus
 	err := s.Pool.QueryRow(
 		ctx,
 		sql,
-		fileUrl,
+		fileName,
 		jobStatus.String(),
 	).Scan(&newId)
 
@@ -95,7 +95,7 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 	var retrievedJob storage.Job
 
 	sql := `
-        SELECT id, job_status, file_url, created_at
+        SELECT id, job_status, file_name, created_at
         FROM jobs
         WHERE id = $1
         `

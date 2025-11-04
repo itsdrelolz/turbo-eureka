@@ -47,9 +47,9 @@ func TestInsertJobAndGetIDSuccess(t *testing.T) {
 
 	ctx := context.Background()
 
-	resumeUrl := "https://example.com/resumes/johndoe.pdf"
+	resumeName := "https://example.com/resumes/johndoe.pdf"
 
-	jobID, err := postgresDB.InsertJobReturnID(ctx, resumeUrl, storage.Queued)
+	jobID, err := postgresDB.InsertJobReturnID(ctx, resumeName, storage.Queued)
 
 	if err != nil {
 
@@ -62,7 +62,7 @@ func TestInsertJobAndGetIDSuccess(t *testing.T) {
 
 	var savedURL string
 
-	query := "SELECT file_url FROM jobs where id=$1"
+	query := "SELECT file_name FROM jobs where id=$1"
 
 	err = postgresDB.Pool.QueryRow(ctx, query, jobID).Scan(&savedURL)
 
@@ -71,8 +71,8 @@ func TestInsertJobAndGetIDSuccess(t *testing.T) {
 		t.Fatalf("Failed to query back the inserted job: %v", err)
 	}
 
-	if savedURL != resumeUrl {
+	if savedURL != resumeName {
 
-		t.Errorf("URL in database does not match: got %q, want %q", savedURL, resumeUrl)
+		t.Errorf("URL in database does not match: got %q, want %q", savedURL, resumeName)
 	}
 }

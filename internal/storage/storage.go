@@ -23,7 +23,7 @@ type Job struct {
 }
 
 type JobCreator interface { 
-	InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus JobStatus) (uuid.UUID, error)
+	InsertJobReturnID(ctx context.Context, uniqueFileName string, jobStatus JobStatus) (uuid.UUID, error)
 }
 
 type JobUpdater interface {
