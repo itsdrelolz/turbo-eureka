@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	// pool required in order to handle concurrent access
 	apperrors "job-matcher/internal/errors"
 	"job-matcher/internal/storage"
@@ -41,7 +40,6 @@ func New(ctx context.Context, connString string) (*Store, error) {
 		if err := pgxvec.RegisterTypes(ctx, conn); err != nil {
 			return fmt.Errorf("failed to register pgvector types: %w", err)
 		}
-
 		return nil
 	}
 
