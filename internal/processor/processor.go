@@ -15,9 +15,12 @@ import (
 	"os"
 	"sync"
 	"time"
-
 	"github.com/google/uuid"
 )
+
+// TODO: Fix some crucial errors
+// Correct Retries, these should occur when the error is recoverable
+// implement a method for jobs to be cleaned up if they have been in the queue for too long
 
 // Set number of workers
 
@@ -222,7 +225,7 @@ func (p *JobProcessor) processJobFile(ctx context.Context, job *storage.Job, job
 		return nil, fmt.Errorf("Failed to update job status for job %s, with %v", jobID, err)
 	}
 
-	userResume, err := p.store.Download(ctx, p.s3Bucket, job.FileUrl)
+	userResume, err := p.store.Download(ctx, p.s3Bucket, job.FileName)
 
 	if err != nil {
 		log.Printf("Failed downloading file for job %s: %v", jobID, err)

@@ -1,0 +1,50 @@
+services:
+
+
+
+
+  db:
+
+
+    image: pgvector/pgvector:pg18-trixie
+  
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=testdb
+ 
+    ports: 
+      - "5433:5432"
+
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  valkey:
+
+    image: valkey/valkey
+
+    ports:
+      - "6380:6379"
+  
+    command: valkey-server --requirepass mysecretpassword
+
+
+
+  s3:
+    image: minio/minio:latest
+   
+    ports:
+      - "9000:9000"  
+      - "9002:9001"  
+   
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+   
+    command: server /data --console-address ":9001"
+    
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

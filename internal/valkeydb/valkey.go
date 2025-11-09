@@ -67,3 +67,5 @@ func (v *ValkeyClient) ConsumeJob(ctx context.Context) (string, error) {
 	return queuedJob, nil
 
 }
+
+
