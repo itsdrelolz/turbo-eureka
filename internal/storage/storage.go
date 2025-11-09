@@ -18,7 +18,7 @@ const (
 type Job struct {
 	ID        uuid.UUID
 	JobStatus JobStatus
-	FileUrl   string
+	FileName  string
 	CreatedAt time.Time
 }
 

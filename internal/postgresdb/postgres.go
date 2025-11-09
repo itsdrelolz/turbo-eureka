@@ -4,17 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	// pool required in order to handle concurrent access
-	apperrors "job-matcher/internal/errors"
-	"job-matcher/internal/storage"
-
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pgvector/pgvector-go"
 	pgxvec "github.com/pgvector/pgvector-go/pgx"
+	apperrors "job-matcher/internal/errors"
+	"job-matcher/internal/storage"
 )
 
 type Store struct {
@@ -105,6 +103,7 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 
 	var retrievedJob storage.Job
 
+	// convert to string before sending back
 	var statusString string
 
 	sql := `
@@ -120,7 +119,7 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 	).Scan(
 		&retrievedJob.ID,
 		&statusString,
-		&retrievedJob.FileUrl,
+		&retrievedJob.FileName,
 		&retrievedJob.CreatedAt,
 	)
 

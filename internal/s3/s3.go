@@ -50,6 +50,10 @@ func NewFileStore(ctx context.Context, conf S3Config) (*FileStore, error) {
 
 func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, contentType string) error {
 
+	if file == nil {
+		return fmt.Errorf("empty file, invalid input")
+	}
+
 	_, err := fs.Client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
 		Key:         aws.String(key),
@@ -72,7 +76,7 @@ func (fs *FileStore) Download(ctx context.Context, bucket, key string) ([]byte, 
 	var notFoundErr *types.NotFound
 
 	if errors.As(err, &notFoundErr) {
-		return nil, fmt.Errorf("file not found in s3 (404): %w", apperrors.ErrPermanentFailure)
+		return nil, fmt.Errorf("file not found (404): %w", apperrors.ErrPermanentFailure)
 	}
 
 	if err != nil {

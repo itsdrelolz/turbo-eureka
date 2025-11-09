@@ -15,24 +15,27 @@ import (
 func main() {
 
 	err := godotenv.Load()
+
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
+
 	ctx := context.Background()
-	postgresDB, err := postgresdb.New(ctx, os.Getenv("DATABASE_URL"))
+
+	db, err := postgresdb.New(ctx, os.Getenv("DATABASE_URL"))
 
 	if err != nil {
 		log.Fatalf("Failed to initialize postgresdb: %v", err)
 	}
-	defer postgresDB.Close()
+	defer db.Close()
 
-	valkeyQueue, err := valkeydb.New(ctx, os.Getenv("VALKEY_URL"), os.Getenv("VALKEY_PASSWORD"))
+	valkey, err := valkeydb.New(ctx, os.Getenv("VALKEY_URL"), os.Getenv("VALKEY_PASSWORD"))
 
 	if err != nil {
 		log.Fatalf("Failed to initialize valkey: %v", err)
 	}
 
-	defer valkeyQueue.Close()
+	defer valkey.Close()
 
 	s3Conf := s3.S3Config{
 		EndpointURL: os.Getenv("S3_ENDPOINT_URL"),
@@ -54,7 +57,7 @@ func main() {
 
 	log.Println("S3 FileStore initialized")
 
-	apiHandler := api.NewAPIHandler(postgresDB, valkeyQueue, s3Store, bucketName)
+	apiHandler := api.NewAPIHandler(db, valkey, s3Store, bucketName)
 
 	router := api.NewRouter(apiHandler)
 
