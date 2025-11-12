@@ -234,7 +234,7 @@ func (p *JobProcessor) fetchJobWithRetry(ctx context.Context, jobID uuid.UUID) (
 	return nil, fmt.Errorf("failed to fetch job %s after %d retries: %w", jobID, maxRetries, lastErr)
 }
 
-//   starts the processing of the actual job
+//	starts the processing of the actual job
 //
 // The downloaded resume has its text extracted
 func (p *JobProcessor) processJobFile(ctx context.Context, job *storage.Job, jobID uuid.UUID) (string, error) {
@@ -283,7 +283,7 @@ func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, 
 			delay := calculateExponentialBackoff(i, baseDelay)
 			select {
 			case <-ctx.Done():
-				return ctx.Err() 
+				return ctx.Err()
 			case <-time.After(delay):
 				// continue to next attempt
 			}
@@ -293,7 +293,7 @@ func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, 
 	return fmt.Errorf("failed to update job status for job %s after %d retries: %w", jobID, maxRetries, lastErr)
 }
 
-//   the final step to processing a job
+//	the final step to processing a job
 //
 // saves results of the job or returns an error if not recoverable
 func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID, content string) error {

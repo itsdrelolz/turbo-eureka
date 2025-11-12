@@ -11,6 +11,7 @@ import (
 	apperrors "job-matcher/internal/errors"
 	"job-matcher/internal/storage"
 )
+
 type Store struct {
 	Pool *pgxpool.Pool
 }

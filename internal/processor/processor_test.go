@@ -3,12 +3,12 @@ package processor
 import (
 	"context"
 	"errors"
+	"github.com/google/uuid"
+	apperrors "job-matcher/internal/errors"
+	"job-matcher/internal/storage"
 	"strings"
 	"testing"
 	"time"
-	apperrors "job-matcher/internal/errors"
-	"job-matcher/internal/storage"
-	"github.com/google/uuid"
 )
 
 type MockJobStore struct {

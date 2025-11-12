@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 )
 
-
 type APIHandler struct {
 	db       storage.JobCreator
 	queue    queue.JobProducer
