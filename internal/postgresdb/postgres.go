@@ -6,15 +6,11 @@ import (
 	"fmt"
 	// pool required in order to handle concurrent access
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/pgvector/pgvector-go"
-	pgxvec "github.com/pgvector/pgvector-go/pgx"
 	apperrors "job-matcher/internal/errors"
 	"job-matcher/internal/storage"
 )
-
 type Store struct {
 	Pool *pgxpool.Pool
 }
@@ -24,23 +20,7 @@ func New(ctx context.Context, connString string) (*Store, error) {
 		return nil, fmt.Errorf("database connection string is required")
 	}
 
-	// Configure connection to register pgvector types automatically
 	config, err := pgxpool.ParseConfig(connString)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse database config: %w", err)
-	}
-
-	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-		_, err := conn.Exec(ctx, `CREATE EXTENSION IF NOT EXISTS vector`)
-		if err != nil {
-			return fmt.Errorf("failed to enable pgvector extension: %w", err)
-		}
-
-		if err := pgxvec.RegisterTypes(ctx, conn); err != nil {
-			return fmt.Errorf("failed to register pgvector types: %w", err)
-		}
-		return nil
-	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
@@ -172,29 +152,29 @@ func (s *Store) UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus 
 
 }
 
-func (s *Store) SetEmbeddingWithID(ctx context.Context, jobID uuid.UUID, resumeEmbedding []float32) error {
+func (s *Store) SetContentWithID(ctx context.Context, jobID uuid.UUID, resumeContent string) error {
 
 	sql := `
 		UPDATE jobs
-		SET embedding = $1
+		SET resume_content = $1
 		WHERE id = $2
 		`
 
 	_, err := s.Pool.Exec(
 		ctx,
 		sql,
-		pgvector.NewVector(resumeEmbedding),
+		resumeContent,
 		jobID,
 	)
 
 	var notFoundErr *pgconn.PgError
 
 	if errors.As(err, &notFoundErr) {
-		return fmt.Errorf("Embedding row not found (404): %w", apperrors.ErrPermanentFailure)
+		return fmt.Errorf("row not found (404): %w", apperrors.ErrPermanentFailure)
 	}
 
 	if err != nil {
-		return fmt.Errorf("Failed to insert embedding into job with error: %w", err)
+		return fmt.Errorf("Failed to insert content into job with error: %w", err)
 	}
 
 	return nil
