@@ -29,7 +29,7 @@ type JobCreator interface {
 type JobUpdater interface {
 	JobByID(ctx context.Context, jobID uuid.UUID) (*Job, error)
 	UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus JobStatus) error
-	SetContentWithID(ctx context.Context, jobID uuid.UUID, resumeEmbedding []float32) error
+	SetContentWithID(ctx context.Context, jobID uuid.UUID, resumeContent string) error
 }
 
 type JobStore interface {

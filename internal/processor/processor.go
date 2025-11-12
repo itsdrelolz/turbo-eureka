@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	apperrors "job-matcher/internal/errors"
 	"job-matcher/internal/objectstore"
 	"job-matcher/internal/queue"
@@ -13,14 +14,13 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"rsc.io/pdf"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
-	"github.com/google/uuid"
-	"rsc.io/pdf"
 )
 
 // Set number of workers
@@ -46,28 +46,32 @@ func (p *JobProcessor) startConsumer(ctx context.Context, jobsChan chan uuid.UUI
 	log.Printf("Job processor has started, waiting for jobs...")
 
 	for {
+
+		jobIDStr, err := p.queue.ConsumeJob(ctx)
+
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				log.Printf("Job consumer stopping...")
+				return // Exit the loop and goroutine
+			}
+			log.Printf("error consuming from job queue, trying again...")
+			time.Sleep(5 * time.Second) // wait and then try again
+			continue
+		}
+
+		jobID, err := uuid.Parse(jobIDStr)
+		if err != nil {
+			log.Printf("invalid job id given, skipping job: %s. Error: %v", jobIDStr, err)
+			continue
+		}
+
 		select {
+		case jobsChan <- jobID:
+			// Job successfully sent to a worker
 		case <-ctx.Done():
-			log.Printf("Job consumer stopping...")
+			// Shutdown signal received while trying to send
+			log.Printf("Job consumer stopping, not sending new job")
 			return
-		default:
-			jobIDStr, err := p.queue.ConsumeJob(ctx)
-
-			if err != nil {
-				log.Printf("error consuming from job queue, trying again...")
-				time.Sleep(5 * time.Second) // wait and then try again
-				continue
-			}
-
-			jobID, err := uuid.Parse(jobIDStr)
-
-			if err != nil {
-				log.Printf("invalid job id given, skipping job: %s. Error: %v", jobIDStr, err)
-				continue
-			}
-
-			// send job id to worker channel
-			jobsChan <- jobID
 		}
 	}
 }
@@ -121,7 +125,7 @@ func (p *JobProcessor) Run(ctx context.Context) {
 // Logic for handling a jobs processings. The job has a set limit for how long it may run before cancelling.
 // A job attemps to fetch the necessary information from the db
 // It then attempts to generate the emedding of the given resume
-// The job then updates the db with the embedding
+// The job then updates the db with the resume content
 func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 
 	log.Printf("Processing given job with ID: %s", jobID)
@@ -138,8 +142,11 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 		log.Printf("Faild job with error: %v", err)
 		// unrecoverable job, mark as failed
 		if !isRetryable(err) {
-			p.db.UpdateJobStatus(context.Background(), jobID, storage.Failed)
+			updateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			p.db.UpdateJobStatus(updateCtx, jobID, storage.Failed)
 		}
+		return
 	}
 
 	extractedText, err := p.processJobFile(jobCtx, job, job.ID)
@@ -147,7 +154,9 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 	if err != nil {
 		if errors.Is(err, apperrors.ErrPermanentFailure) {
 			log.Printf("Fatal, non-retryable failure for job %s: %v. Marking as failed.", jobID, err)
-			p.db.UpdateJobStatus(context.Background(), jobID, storage.Failed)
+			updateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			p.db.UpdateJobStatus(updateCtx, jobID, storage.Failed)
 			return // End job execution instantly
 		}
 
@@ -158,13 +167,19 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 	if err := p.saveResultsWithRetry(jobCtx, job.ID, extractedText); err != nil {
 		log.Printf("Failed to save results for job %s: %v. Job failed.", jobID, err)
 		if !isRetryable(err) {
-			p.db.UpdateJobStatus(context.Background(), jobID, storage.Failed)
+			updateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			p.db.UpdateJobStatus(updateCtx, jobID, storage.Failed)
 		}
 		return
 	}
 
-	// context.Background neccessary, this ensures updating the status to complete isn't limited to the 30 second limit
-	if updateErr := p.updateJobWithRetry(context.Background(), jobID, storage.Completed); updateErr != nil {
+	// use a new, short-lived context to ensure this update succeeds
+	// even if the jobCtx timed out
+	updateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if updateErr := p.updateJobWithRetry(updateCtx, jobID, storage.Completed); updateErr != nil {
 		log.Printf("WARNING: Job %s completed work, but failed to mark status as Completed: %v", jobID, updateErr)
 	} else {
 		log.Printf("Job %s completed successfully.", jobID)
@@ -183,9 +198,12 @@ func (p *JobProcessor) fetchJobWithRetry(ctx context.Context, jobID uuid.UUID) (
 	// database calls can be more frequent
 	const baseDelay = 1 * time.Second
 
+	var lastErr error
+
 	for i := range maxRetries {
 
 		job, err := p.db.JobByID(ctx, jobID)
+		lastErr = err // Store the last error encountered
 
 		if err == nil {
 			return job, nil
@@ -210,12 +228,12 @@ func (p *JobProcessor) fetchJobWithRetry(ctx context.Context, jobID uuid.UUID) (
 	}
 
 	// Final Failure: Max attempts reached
-	return nil, fmt.Errorf("failed to fetch job %s after %d retries: %w", jobID, maxRetries, ctx.Err())
+	return nil, fmt.Errorf("failed to fetch job %s after %d retries: %w", jobID, maxRetries, lastErr)
 }
 
-//	starts the processing of the actual job
+//   starts the processing of the actual job
 //
-// The downloaded resume has its text extracted 
+// The downloaded resume has its text extracted
 func (p *JobProcessor) processJobFile(ctx context.Context, job *storage.Job, jobID uuid.UUID) (string, error) {
 
 	if err := p.updateJobWithRetry(ctx, jobID, storage.Processing); err != nil {
@@ -224,15 +242,17 @@ func (p *JobProcessor) processJobFile(ctx context.Context, job *storage.Job, job
 
 	resume, err := p.store.Download(ctx, p.s3Bucket, job.FileUrl)
 
-	if err != nil { 
+	if err != nil {
+		// Note: This could be improved by checking for "Not Found" errors
+		// and wrapping them in apperrors.ErrPermanentFailure
 		return "", fmt.Errorf("Failed to load file with for job %s, with %v", jobID, err)
 	}
 
 	extractedText, err := p.extractTextFromPDF(resume)
 
-
-	if err != nil { 
-		return "", fmt.Errorf("An error occured while extracted text on job %s, with %v", jobID, err)
+	if err != nil {
+		// PDF parsing errors are often permanent for a corrupted file
+		return "", fmt.Errorf("An error occured while extracted text on job %s, with %v: %w", jobID, err, apperrors.ErrPermanentFailure)
 	}
 	return extractedText, nil
 }
@@ -245,9 +265,12 @@ func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, 
 	const maxRetries = 4
 	const baseDelay = 1 * time.Second
 
+	var lastErr error
+
 	for i := range maxRetries {
 
 		err := p.db.UpdateJobStatus(ctx, jobID, jobStatus)
+		lastErr = err
 
 		if err == nil || !isRetryable(err) {
 			return err
@@ -266,9 +289,10 @@ func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, 
 		}
 	}
 
-	return fmt.Errorf("failed to update job status for job %s after %d retries", jobID, maxRetries)
+	return fmt.Errorf("failed to update job status for job %s after %d retries: %w", jobID, maxRetries, lastErr)
 }
-//	the final step to processing a job
+
+//   the final step to processing a job
 //
 // saves results of the job or returns an error if not recoverable
 func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID, content string) error {
@@ -277,7 +301,12 @@ func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID
 
 	const baseDelay = 10 * time.Second
 
+	var lastErr error
+
 	for i := range maxRetries {
+
+		err := p.db.SetContentWithID(ctx, jobID, content)
+		lastErr = err
 
 		if err == nil {
 			return nil // Return immediately on success.
@@ -287,7 +316,7 @@ func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID
 			return fmt.Errorf("Failed to update job status for job: %s, with: %v", jobID, err)
 		}
 
-		slog.Warn("error saving embedding, retrying...",
+		slog.Warn("error saving resume content, retrying...",
 			"jobID", jobID, "attempt", i+1, "error", err)
 
 		if i < maxRetries-1 {
@@ -302,7 +331,7 @@ func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID
 			}
 		}
 	}
-	return fmt.Errorf("failed to save embedding for job %s after %d retries", jobID, maxRetries)
+	return fmt.Errorf("failed to save resume content for job %s after %d retries: %w", jobID, maxRetries, lastErr)
 }
 
 // function checks whether the error is recoverable based on some common cases
@@ -311,9 +340,13 @@ func isRetryable(err error) bool {
 		return false
 	}
 
+	// do not retry on context cancellation
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
 	// do not retry unrecoverable errors
 	if errors.Is(err, apperrors.ErrPermanentFailure) {
-
 		return false
 	}
 
@@ -328,10 +361,7 @@ func calculateExponentialBackoff(attempts int, baseDelay time.Duration) time.Dur
 }
 
 // Scanned pdfs cause problems for general pdf reading libraries
-// Check if a function contains valid pdf text
 func (p *JobProcessor) extractTextFromPDF(file []byte) (string, error) {
-
-	// char that only serves as noise in output 
 	const replacementChar = string(unicode.ReplacementChar)
 
 	r := bytes.NewReader(file)
@@ -340,30 +370,28 @@ func (p *JobProcessor) extractTextFromPDF(file []byte) (string, error) {
 		return "", err
 	}
 
-	page := reader.Page(reader.NumPage())
-	content := page.Content()
+	var result strings.Builder
+	numPages := reader.NumPage()
 
-	texts := content.Text
+	for i := 1; i <= numPages; i++ {
+		page := reader.Page(i)
+		content := page.Content()
+		texts := content.Text
 
-	var result string
+		sort.Slice(texts, func(i, j int) bool {
+			if texts[i].Y == texts[j].Y {
+				return texts[i].X < texts[j].X
+			}
+			return texts[i].Y > texts[j].Y
+		})
 
-	// parsing can differ between formatting
-	// sorting attempts to standardize the order of the resulting output
-	sort.Slice(texts, func(i, j int) bool {
-		if texts[i].Y == texts[j].Y {
-			return texts[i].X < texts[j].X
+		for _, t := range texts {
+			if utf8.ValidString(t.S) {
+				result.WriteString(t.S)
+			}
 		}
-		return texts[i].Y > texts[j].Y
-	})
-
-	for _, t := range texts {
-		if utf8.ValidString(t.S) {
-			result += t.S
-
-			result += ""
-		}
+		result.WriteString("\n") // Add a space or newline between pages
 	}
-	return strings.ReplaceAll(result, replacementChar, ""), nil
+
+	return strings.ReplaceAll(result.String(), replacementChar, ""), nil
 }
-
-
