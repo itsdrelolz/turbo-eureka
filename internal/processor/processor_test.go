@@ -72,7 +72,7 @@ func TestExponentialBackoff(t *testing.T) {
 
 func TestFetchJobWithRetrySuccessOnFirstAttempt(t *testing.T) {
 	jobID := uuid.New()
-	expectedJob := &storage.Job{ID: jobID, FileUrl: "test/file.pdf"}
+	expectedJob := &storage.Job{ID: jobID, FileName: "test/file.pdf"}
 	calls := 0
 	mockDB := &MockJobStore{
 		JobByIDFunc: func(ctx context.Context, id uuid.UUID) (*storage.Job, error) {
