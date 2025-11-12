@@ -33,8 +33,25 @@ jobs:
       run: |
         docker compose -f docker-compose.test.yaml up -d
         echo "Waiting for services to be ready..."
-        sleep 10
+        sleep 5
+    - name: Install MinIO Client
+      run: |
+        curl -sLO https://dl.min.io/client/mc/release/linux-amd64/mc
+        chmod +x mc
+        sudo mv mc /usr/local/bin/
 
+    - name: Create S3 Bucket for Testing
+      run: |
+        mc alias set ci http://localhost:9000 minioadmin minioadmin
+        
+        until mc admin info ci; do
+          echo "Waiting for MinIO service..."
+          sleep 2
+        done
+        
+        mc mb ci/${S3_BUCKET_NAME:-resume-bucket} --ignore-existing
+      env:
+        S3_BUCKET_NAME: ${{ env.S3_BUCKET_NAME || 'resume-bucket' }}
     - name: Run tests (including integration)
       env:
         DATABASE_URL: postgres://postgres:password@localhost:5433/testdb?sslmode=disable
