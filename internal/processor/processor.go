@@ -28,13 +28,13 @@ import (
 const numWorkers = 5
 
 type JobProcessor struct {
-	db       storage.JobStore
+	db       storage.JobUpdater
 	queue    queue.JobConsumer
 	store    objectstore.FileFetcher
 	s3Bucket string
 }
 
-func NewJobProcessor(db storage.JobStore, queue queue.JobConsumer, store objectstore.FileFetcher, s3Bucket string) *JobProcessor {
+func NewJobProcessor(db storage.JobUpdater, queue queue.JobConsumer, store objectstore.FileFetcher, s3Bucket string) *JobProcessor {
 	return &JobProcessor{db: db, queue: queue, store: store, s3Bucket: s3Bucket}
 }
 
@@ -100,7 +100,7 @@ func (p *JobProcessor) Run(ctx context.Context) {
 
 	var wg sync.WaitGroup
 
-	// separate go routine just for consuming jobs.
+	// separate go routine for consuming jobs.
 	go p.startConsumer(ctx, jobsChan)
 
 	// starts the set amount of workers
@@ -160,7 +160,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 			return // End job execution instantly
 		}
 
-		log.Printf("Transient error processing job %s: %v. Job will be requeued.", jobID, err)
+		log.Printf("Unrecoverable error processing job %s: %v.", jobID, err)
 		return
 	}
 
@@ -212,11 +212,10 @@ func (p *JobProcessor) fetchJobWithRetry(ctx context.Context, jobID uuid.UUID) (
 		if !isRetryable(err) {
 			return nil, fmt.Errorf("non-retryable error fetching job %s: %w", jobID, err)
 		}
-		// 3. Transient Failure: Log, Sleep, and Retry
-		slog.Warn("Transient error fetching job, retrying...",
+
+		slog.Warn("Unrecoverable error fetching job, retrying...",
 			"jobID", jobID, "attempt", i+1, "error", err)
 
-		// Use backoff only between attempts (not on the last attempt)
 		if i < maxRetries-1 {
 			delay := calculateExponentialBackoff(i, baseDelay)
 			select {
@@ -243,8 +242,6 @@ func (p *JobProcessor) processJobFile(ctx context.Context, job *storage.Job, job
 	resume, err := p.store.Download(ctx, p.s3Bucket, job.FileUrl)
 
 	if err != nil {
-		// Note: This could be improved by checking for "Not Found" errors
-		// and wrapping them in apperrors.ErrPermanentFailure
 		return "", fmt.Errorf("Failed to load file with for job %s, with %v", jobID, err)
 	}
 
@@ -282,7 +279,7 @@ func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, 
 			delay := calculateExponentialBackoff(i, baseDelay)
 			select {
 			case <-ctx.Done():
-				return ctx.Err() // Propagate cancellation immediately
+				return ctx.Err() 
 			case <-time.After(delay):
 				// continue to next attempt
 			}

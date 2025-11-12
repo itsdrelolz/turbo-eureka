@@ -157,7 +157,7 @@ func (s *Store) SetContentWithID(ctx context.Context, jobID uuid.UUID, resumeCon
 
 	sql := `
 		UPDATE jobs
-		SET content = $1
+		SET resume_content = $1
 		WHERE id = $2
 		`
 

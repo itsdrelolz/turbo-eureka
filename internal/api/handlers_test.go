@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func TestHandleUploadResume_Success(t *testing.T) {
+func TestHandleUploadResumeSuccess(t *testing.T) {
 
 	testUUID := uuid.New()
 
