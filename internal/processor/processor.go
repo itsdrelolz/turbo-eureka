@@ -1,11 +1,11 @@
 package processor
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	apperrors "job-matcher/internal/errors"
-	"job-matcher/internal/gemini"
 	"job-matcher/internal/objectstore"
 	"job-matcher/internal/queue"
 	"job-matcher/internal/storage"
@@ -13,10 +13,14 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"sort"
+	"strings"
 	"sync"
 	"time"
-
+	"unicode"
+	"unicode/utf8"
 	"github.com/google/uuid"
+	"rsc.io/pdf"
 )
 
 // Set number of workers
@@ -28,14 +32,13 @@ type JobProcessor struct {
 	queue    queue.JobConsumer
 	store    objectstore.FileFetcher
 	s3Bucket string
-	gemini   gemini.ResumerParser
 }
 
-func NewJobProcessor(db storage.JobStore, queue queue.JobConsumer, store objectstore.FileFetcher, s3Bucket string, gemini gemini.ResumerParser) *JobProcessor {
-	return &JobProcessor{db: db, queue: queue, store: store, s3Bucket: s3Bucket, gemini: gemini}
+func NewJobProcessor(db storage.JobStore, queue queue.JobConsumer, store objectstore.FileFetcher, s3Bucket string) *JobProcessor {
+	return &JobProcessor{db: db, queue: queue, store: store, s3Bucket: s3Bucket}
 }
 
-// Runner for a job. A job may complete the work given to it and be marked as complete, or fail and be marked incomplete.
+// Runner for a job. Completed jobs will be marked as complete in the database. Failed jobs are marked incomplete.
 func (p *JobProcessor) startConsumer(ctx context.Context, jobsChan chan uuid.UUID) {
 
 	defer close(jobsChan)
@@ -48,7 +51,7 @@ func (p *JobProcessor) startConsumer(ctx context.Context, jobsChan chan uuid.UUI
 			log.Printf("Job consumer stopping...")
 			return
 		default:
-			jobIdStr, err := p.queue.ConsumeJob(ctx)
+			jobIDStr, err := p.queue.ConsumeJob(ctx)
 
 			if err != nil {
 				log.Printf("error consuming from job queue, trying again...")
@@ -56,10 +59,10 @@ func (p *JobProcessor) startConsumer(ctx context.Context, jobsChan chan uuid.UUI
 				continue
 			}
 
-			jobID, err := uuid.Parse(jobIdStr)
+			jobID, err := uuid.Parse(jobIDStr)
 
 			if err != nil {
-				log.Printf("invalid job id given, skipping job: %s. Error: %v", jobIdStr, err)
+				log.Printf("invalid job id given, skipping job: %s. Error: %v", jobIDStr, err)
 				continue
 			}
 
@@ -133,14 +136,13 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 
 	if err != nil {
 		log.Printf("Faild job with error: %v", err)
-
 		// unrecoverable job, mark as failed
 		if !isRetryable(err) {
 			p.db.UpdateJobStatus(context.Background(), jobID, storage.Failed)
 		}
 	}
 
-	resumeEmbedding, err := p.processJobFile(jobCtx, job, job.ID)
+	extractedText, err := p.processJobFile(jobCtx, job, job.ID)
 
 	if err != nil {
 		if errors.Is(err, apperrors.ErrPermanentFailure) {
@@ -153,7 +155,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 		return
 	}
 
-	if err := p.saveResultsWithRetry(jobCtx, job.ID, resumeEmbedding); err != nil {
+	if err := p.saveResultsWithRetry(jobCtx, job.ID, extractedText); err != nil {
 		log.Printf("Failed to save results for job %s: %v. Job failed.", jobID, err)
 		if !isRetryable(err) {
 			p.db.UpdateJobStatus(context.Background(), jobID, storage.Failed)
@@ -213,38 +215,26 @@ func (p *JobProcessor) fetchJobWithRetry(ctx context.Context, jobID uuid.UUID) (
 
 //	starts the processing of the actual job
 //
-// The downloaded resume has its text extracted and then embedded
-//
-//	returns either an embedding for the given resume or an error
-func (p *JobProcessor) processJobFile(ctx context.Context, job *storage.Job, jobID uuid.UUID) ([]float32, error) {
+// The downloaded resume has its text extracted 
+func (p *JobProcessor) processJobFile(ctx context.Context, job *storage.Job, jobID uuid.UUID) (string, error) {
 
 	if err := p.updateJobWithRetry(ctx, jobID, storage.Processing); err != nil {
-		return nil, fmt.Errorf("Failed to update job status for job %s, with %v", jobID, err)
+		return "", fmt.Errorf("Failed to update job status for job %s, with %v", jobID, err)
 	}
 
-	userResume, err := p.store.Download(ctx, p.s3Bucket, job.FileUrl)
+	resume, err := p.store.Download(ctx, p.s3Bucket, job.FileUrl)
 
-	if err != nil {
-		log.Printf("Failed downloading file for job %s: %v", jobID, err)
-		return nil, err
-
+	if err != nil { 
+		return "", fmt.Errorf("Failed to load file with for job %s, with %v", jobID, err)
 	}
 
-	extracedText, err := p.gemini.ExtractText(ctx, userResume)
+	extractedText, err := p.extractTextFromPDF(resume)
 
-	if err != nil {
-		log.Printf("Failed to extract resume text for job %s: %v", jobID, err)
-		return nil, err
+
+	if err != nil { 
+		return "", fmt.Errorf("An error occured while extracted text on job %s, with %v", jobID, err)
 	}
-
-	embeddedResume, err := p.gemini.Embed(ctx, extracedText)
-
-	if err != nil {
-		log.Printf("Failed embedding for job %s: %v", jobID, err)
-		return nil, err
-	}
-
-	return embeddedResume, nil
+	return extractedText, nil
 }
 
 // attempts to update the status of the job with a given id and status
@@ -278,19 +268,16 @@ func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, 
 
 	return fmt.Errorf("failed to update job status for job %s after %d retries", jobID, maxRetries)
 }
-
 //	the final step to processing a job
 //
 // saves results of the job or returns an error if not recoverable
-func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID, embeddings []float32) error {
+func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID, content string) error {
 
 	const maxRetries = 4
 
 	const baseDelay = 10 * time.Second
 
 	for i := range maxRetries {
-
-		err := p.db.SetEmbeddingWithID(ctx, jobID, embeddings)
 
 		if err == nil {
 			return nil // Return immediately on success.
@@ -316,7 +303,6 @@ func (p *JobProcessor) saveResultsWithRetry(ctx context.Context, jobID uuid.UUID
 		}
 	}
 	return fmt.Errorf("failed to save embedding for job %s after %d retries", jobID, maxRetries)
-
 }
 
 // function checks whether the error is recoverable based on some common cases
@@ -340,3 +326,44 @@ func calculateExponentialBackoff(attempts int, baseDelay time.Duration) time.Dur
 	factor := math.Pow(2, float64(attempts))
 	return time.Duration(float64(baseDelay) * factor)
 }
+
+// Scanned pdfs cause problems for general pdf reading libraries
+// Check if a function contains valid pdf text
+func (p *JobProcessor) extractTextFromPDF(file []byte) (string, error) {
+
+	// char that only serves as noise in output 
+	const replacementChar = string(unicode.ReplacementChar)
+
+	r := bytes.NewReader(file)
+	reader, err := pdf.NewReader(r, int64(len(file)))
+	if err != nil {
+		return "", err
+	}
+
+	page := reader.Page(reader.NumPage())
+	content := page.Content()
+
+	texts := content.Text
+
+	var result string
+
+	// parsing can differ between formatting
+	// sorting attempts to standardize the order of the resulting output
+	sort.Slice(texts, func(i, j int) bool {
+		if texts[i].Y == texts[j].Y {
+			return texts[i].X < texts[j].X
+		}
+		return texts[i].Y > texts[j].Y
+	})
+
+	for _, t := range texts {
+		if utf8.ValidString(t.S) {
+			result += t.S
+
+			result += ""
+		}
+	}
+	return strings.ReplaceAll(result, replacementChar, ""), nil
+}
+
+

@@ -15,6 +15,7 @@ func New(ctx context.Context, address string, password string) (*ValkeyClient, e
 		InitAddress: []string{address},
 		Password:    password,
 	})
+
 	if err != nil {
 		return nil, fmt.Errorf("unable to create Valkey client: %w", err)
 	}
@@ -65,5 +66,4 @@ func (v *ValkeyClient) ConsumeJob(ctx context.Context) (string, error) {
 	queuedJob := arr[1]
 
 	return queuedJob, nil
-
 }

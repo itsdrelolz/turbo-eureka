@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"github.com/joho/godotenv"
-	"job-matcher/internal/geministore"
 	"job-matcher/internal/postgresdb"
 	"job-matcher/internal/processor"
 	"job-matcher/internal/s3"
@@ -55,18 +54,11 @@ func main() {
 		log.Fatal("S3_BUCKET_NAME is not set")
 	}
 
-	gemini, err := geministore.New(ctx, os.Getenv("GEMINI_API_KEY"))
-
-	if err != nil {
-		log.Fatalf("no gemini API key given")
-	}
-
 	workerQueue := processor.NewJobProcessor(
 		postgresDB,
 		valkeyQueue,
 		s3Store,
 		bucketName,
-		gemini,
 	)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
