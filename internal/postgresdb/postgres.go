@@ -4,13 +4,35 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 	// pool required in order to handle concurrent access
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	apperrors "job-matcher/internal/errors"
-	"job-matcher/internal/storage"
 )
+
+type JobStatus int
+
+const (
+	Queued JobStatus = iota
+
+	Processing
+
+	Failed
+
+	Completed
+)
+
+type Job struct {
+	ID uuid.UUID
+
+	JobStatus JobStatus
+
+	FileName string
+
+	CreatedAt time.Time
+}
 
 type Store struct {
 	Pool *pgxpool.Pool
@@ -39,8 +61,7 @@ func (s *Store) Close() {
 	s.Pool.Close()
 }
 
-
-func (s *Store) InsertJobReturnID(ctx context.Context, fileName string, jobStatus storage.JobStatus) (uuid.UUID, error) {
+func (s *Store) InsertJobReturnID(ctx context.Context, fileName string, jobStatus JobStatus) (uuid.UUID, error) {
 
 	var newId uuid.UUID
 
@@ -64,9 +85,9 @@ func (s *Store) InsertJobReturnID(ctx context.Context, fileName string, jobStatu
 
 }
 
-func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, error) {
+func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*Job, error) {
 
-	var retrievedJob storage.Job
+	var retrievedJob Job
 
 	// convert to string before sending back
 	var statusString string
@@ -95,7 +116,7 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 	}
 
 	if err != nil {
-		return &storage.Job{}, fmt.Errorf("Failed to retrieve job with error: %w", err)
+		return &Job{}, fmt.Errorf("Failed to retrieve job with error: %w", err)
 	}
 
 	jobStatus, err := stringToJobStatus(statusString)
@@ -109,7 +130,7 @@ func (s *Store) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, err
 
 }
 
-func (s *Store) UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus storage.JobStatus) error {
+func (s *Store) UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus JobStatus) error {
 
 	sql := `
 	UPDATE jobs
@@ -167,34 +188,46 @@ func (s *Store) SetContentWithID(ctx context.Context, jobID uuid.UUID, resumeCon
 
 }
 
-func (s *Store) String(js storage.JobStatus) string {
-	switch js {
-	case storage.Processing:
-		return "processing"
-	case storage.Queued:
-		return "queued"
-	case storage.Failed:
-		return "failed"
-	case storage.Completed:
-		return "completed"
+func stringToJobStatus(s string) (JobStatus, error) {
+	switch s {
+	case "queued":
+		return Queued, nil
+	case "processing":
+		return Processing, nil
+	case "completed":
+		return Completed, nil
+	case "failed":
+		return Failed, nil
 	default:
-		return fmt.Sprintf("JobStatus(%d)", js)
+		// Return a default and an error
+		return Failed, fmt.Errorf("unknown job status string: %s", s)
 	}
 }
 
+func (s JobStatus) String() string {
 
-func stringToJobStatus(s string) (storage.JobStatus, error) {
 	switch s {
-	case "queued":
-		return storage.Queued, nil
-	case "processing":
-		return storage.Processing, nil
-	case "completed":
-		return storage.Completed, nil
-	case "failed":
-		return storage.Failed, nil
+
+	case Queued:
+
+		return "queued"
+
+	case Processing:
+
+		return "processing"
+
+	case Completed:
+
+		return "completed"
+
+	case Failed:
+
+		return "failed"
+
 	default:
-		// Return a default and an error
-		return storage.Failed, fmt.Errorf("unknown job status string: %s", s)
+
+		return "unknown"
+
 	}
+
 }

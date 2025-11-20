@@ -10,5 +10,7 @@ func NewRouter(h *APIHandler) http.Handler {
 
 	mux.HandleFunc("POST /resumes", h.HandleUploadResume)
 
+	mux.HandleFunc("GET /resumes/{jobId}", h.HandleViewResult)
+
 	return mux
 }

@@ -1,15 +1,15 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
-	"job-matcher/internal/storage"
+	"io"
+	"job-matcher/internal/postgresdb"
 	"log"
 	"net/http"
 	"path/filepath"
-	"context"
-	"io"
 )
 
 type APIHandler struct {
@@ -20,9 +20,8 @@ type APIHandler struct {
 }
 
 type JobCreator interface {
-	InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus storage.JobStatus) (uuid.UUID, error)
+	InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus postgresdb.JobStatus) (uuid.UUID, error)
 }
-
 
 type JobProducer interface {
 	InsertJob(ctx context.Context, jobID string) error
@@ -69,7 +68,7 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	jobID, err := h.db.InsertJobReturnID(r.Context(), uniqueFileName, storage.JobStatus(storage.Queued))
+	jobID, err := h.db.InsertJobReturnID(r.Context(), uniqueFileName, postgresdb.JobStatus(postgresdb.Queued))
 
 	if err != nil {
 		http.Error(w, "An error occurred while processing your resume", http.StatusInternalServerError)
@@ -92,5 +91,13 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	log.Printf("Job %s queued successfully at %s", jobIDString, uniqueFileName)
-	json.NewEncoder(w).Encode(map[string]string{"jobId": jobIDString})
+	json.NewEncoder(w).Encode(map[string]string{"job_id": jobIDString})
+}
+
+func (h *APIHandler) HandleViewResult(w http.ResponseWriter, r *http.Request) {
+
+	json.NewEncoder(w).Encode(map[string]string{"job_id": jobIDString,
+		"status":      jobStatus,
+		"resume_text": resumeText,
+	})
 }

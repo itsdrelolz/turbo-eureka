@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	apperrors "job-matcher/internal/errors"
-	"job-matcher/internal/storage"
+	"job-matcher/internal/postgresdb"
 	"log"
 	"log/slog"
 	"math"
@@ -36,11 +36,9 @@ type JobProcessor struct {
 	s3Bucket string
 }
 
-
-
 type JobUpdater interface {
-	JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, error)
-	UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus storage.JobStatus) error
+	JobByID(ctx context.Context, jobID uuid.UUID) (*postgresdb.Job, error)
+	UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus postgresdb.JobStatus) error
 	SetContentWithID(ctx context.Context, jobID uuid.UUID, resumeContent string) error
 }
 
@@ -51,7 +49,6 @@ type JobConsumer interface {
 type FileFetcher interface {
 	Download(ctx context.Context, bucket, key string) ([]byte, error)
 }
-
 
 func NewJobProcessor(db JobUpdater, queue JobConsumer, store FileFetcher, s3Bucket string) *JobProcessor {
 	return &JobProcessor{db: db, queue: queue, store: store, s3Bucket: s3Bucket}
@@ -163,7 +160,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 		if !isRetryable(err) {
 			updateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			p.db.UpdateJobStatus(updateCtx, jobID, storage.Failed)
+			p.db.UpdateJobStatus(updateCtx, jobID, postgresdb.Failed)
 		}
 		return
 	}
@@ -175,7 +172,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 			log.Printf("Fatal, non-retryable failure for job %s: %v. Marking as failed.", jobID, err)
 			updateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			p.db.UpdateJobStatus(updateCtx, jobID, storage.Failed)
+			p.db.UpdateJobStatus(updateCtx, jobID, postgresdb.Failed)
 			return // End job execution instantly
 		}
 
@@ -188,7 +185,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 		if !isRetryable(err) {
 			updateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			p.db.UpdateJobStatus(updateCtx, jobID, storage.Failed)
+			p.db.UpdateJobStatus(updateCtx, jobID, postgresdb.Failed)
 		}
 		return
 	}
@@ -198,7 +195,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 	updateCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if updateErr := p.updateJobWithRetry(updateCtx, jobID, storage.Completed); updateErr != nil {
+	if updateErr := p.updateJobWithRetry(updateCtx, jobID, postgresdb.Completed); updateErr != nil {
 		log.Printf("WARNING: Job %s completed work, but failed to mark status as Completed: %v", jobID, updateErr)
 	} else {
 		log.Printf("Job %s completed successfully.", jobID)
@@ -210,7 +207,7 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 // If it fails to deliver the necessary data, may attempt to retry based on the error
 // A max amount of retries is defined.
 // return the full job or returns an error if it is not able to recover
-func (p *JobProcessor) fetchJobWithRetry(ctx context.Context, jobID uuid.UUID) (*storage.Job, error) {
+func (p *JobProcessor) fetchJobWithRetry(ctx context.Context, jobID uuid.UUID) (*postgresdb.Job, error) {
 
 	const maxRetries = 4
 
@@ -252,9 +249,9 @@ func (p *JobProcessor) fetchJobWithRetry(ctx context.Context, jobID uuid.UUID) (
 //	starts the processing of the actual job
 //
 // The downloaded resume has its text extracted
-func (p *JobProcessor) processJobFile(ctx context.Context, job *storage.Job, jobID uuid.UUID) (string, error) {
+func (p *JobProcessor) processJobFile(ctx context.Context, job *postgresdb.Job, jobID uuid.UUID) (string, error) {
 
-	if err := p.updateJobWithRetry(ctx, jobID, storage.Processing); err != nil {
+	if err := p.updateJobWithRetry(ctx, jobID, postgresdb.Processing); err != nil {
 		return "", fmt.Errorf("Failed to update job status for job %s, with %v", jobID, err)
 	}
 
@@ -276,7 +273,7 @@ func (p *JobProcessor) processJobFile(ctx context.Context, job *storage.Job, job
 // attempts to update the status of the job with a given id and status
 // A max number of retries is defined as well as a base delay
 // function updates the status of a job or returns an error if the job is not recoverable
-func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, jobStatus storage.JobStatus) error {
+func (p *JobProcessor) updateJobWithRetry(ctx context.Context, jobID uuid.UUID, jobStatus postgresdb.JobStatus) error {
 
 	const maxRetries = 4
 	const baseDelay = 1 * time.Second
