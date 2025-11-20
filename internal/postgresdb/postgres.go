@@ -39,21 +39,6 @@ func (s *Store) Close() {
 	s.Pool.Close()
 }
 
-func stringToJobStatus(s string) (storage.JobStatus, error) {
-	switch s {
-	case "queued":
-		return storage.Queued, nil
-	case "processing":
-		return storage.Processing, nil
-	case "completed":
-		return storage.Completed, nil
-	case "failed":
-		return storage.Failed, nil
-	default:
-		// Return a default and an error
-		return storage.Failed, fmt.Errorf("unknown job status string: %s", s)
-	}
-}
 
 func (s *Store) InsertJobReturnID(ctx context.Context, fileName string, jobStatus storage.JobStatus) (uuid.UUID, error) {
 
@@ -194,5 +179,22 @@ func (s *Store) String(js storage.JobStatus) string {
 		return "completed"
 	default:
 		return fmt.Sprintf("JobStatus(%d)", js)
+	}
+}
+
+
+func stringToJobStatus(s string) (storage.JobStatus, error) {
+	switch s {
+	case "queued":
+		return storage.Queued, nil
+	case "processing":
+		return storage.Processing, nil
+	case "completed":
+		return storage.Completed, nil
+	case "failed":
+		return storage.Failed, nil
+	default:
+		// Return a default and an error
+		return storage.Failed, fmt.Errorf("unknown job status string: %s", s)
 	}
 }

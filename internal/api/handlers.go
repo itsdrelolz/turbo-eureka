@@ -4,22 +4,35 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
-	"job-matcher/internal/objectstore"
-	"job-matcher/internal/queue"
 	"job-matcher/internal/storage"
 	"log"
 	"net/http"
 	"path/filepath"
+	"context"
+	"io"
 )
 
 type APIHandler struct {
-	db       storage.JobCreator
-	queue    queue.JobProducer
-	store    objectstore.FileStorer
+	db       JobCreator
+	queue    JobProducer
+	store    FileStorer
 	s3Bucket string
 }
 
-func NewAPIHandler(db storage.JobCreator, queue queue.JobProducer, store objectstore.FileStorer, s3Bucket string) *APIHandler {
+type JobCreator interface {
+	InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus storage.JobStatus) (uuid.UUID, error)
+}
+
+
+type JobProducer interface {
+	InsertJob(ctx context.Context, jobID string) error
+}
+
+type FileStorer interface {
+	Upload(ctx context.Context, file io.Reader, bucket, key, contentType string) error
+}
+
+func NewAPIHandler(db JobCreator, queue JobProducer, store FileStorer, s3Bucket string) *APIHandler {
 	return &APIHandler{
 		db:       db,
 		queue:    queue,

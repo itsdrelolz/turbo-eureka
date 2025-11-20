@@ -1,6 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS vector;
-
-
 CREATE TABLE jobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     file_name TEXT NOT NULL,

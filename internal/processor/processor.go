@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	apperrors "job-matcher/internal/errors"
-	"job-matcher/internal/objectstore"
-	"job-matcher/internal/queue"
 	"job-matcher/internal/storage"
 	"log"
 	"log/slog"
@@ -32,13 +30,30 @@ import (
 const numWorkers = 5
 
 type JobProcessor struct {
-	db       storage.JobUpdater
-	queue    queue.JobConsumer
-	store    objectstore.FileFetcher
+	db       JobUpdater
+	queue    JobConsumer
+	store    FileFetcher
 	s3Bucket string
 }
 
-func NewJobProcessor(db storage.JobUpdater, queue queue.JobConsumer, store objectstore.FileFetcher, s3Bucket string) *JobProcessor {
+
+
+type JobUpdater interface {
+	JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, error)
+	UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus storage.JobStatus) error
+	SetContentWithID(ctx context.Context, jobID uuid.UUID, resumeContent string) error
+}
+
+type JobConsumer interface {
+	ConsumeJob(ctx context.Context) (string, error)
+}
+
+type FileFetcher interface {
+	Download(ctx context.Context, bucket, key string) ([]byte, error)
+}
+
+
+func NewJobProcessor(db JobUpdater, queue JobConsumer, store FileFetcher, s3Bucket string) *JobProcessor {
 	return &JobProcessor{db: db, queue: queue, store: store, s3Bucket: s3Bucket}
 }
 
@@ -363,7 +378,7 @@ func calculateExponentialBackoff(attempts int, baseDelay time.Duration) time.Dur
 
 // Scanned pdfs cause problems for general pdf reading libraries
 func (p *JobProcessor) extractTextFromPDF(file []byte) (string, error) {
-	const replacementChar = string(unicode.ReplacementChar)
+	const noRune = string(unicode.ReplacementChar)
 
 	r := bytes.NewReader(file)
 	reader, err := pdf.NewReader(r, int64(len(file)))
@@ -394,5 +409,5 @@ func (p *JobProcessor) extractTextFromPDF(file []byte) (string, error) {
 		result.WriteString("\n") // Add a space or newline between pages
 	}
 
-	return strings.ReplaceAll(result.String(), replacementChar, ""), nil
+	return strings.ReplaceAll(result.String(), noRune, ""), nil
 }
