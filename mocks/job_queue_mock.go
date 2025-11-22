@@ -5,11 +5,11 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-type MockJobProducer struct {
+type MockProducer struct {
 	mock.Mock
 }
 
-func (m *MockJobProducer) InsertJob(ctx context.Context, jobID string) error {
+func (m *MockProducer) Produce(ctx context.Context, jobID string) error {
 	args := m.Called(ctx, jobID)
 
 	return args.Error(0)

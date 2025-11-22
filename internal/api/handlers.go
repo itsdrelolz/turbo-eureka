@@ -4,38 +4,37 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
 	"io"
-	"job-matcher/internal/postgresdb"
 	"log"
 	"net/http"
 	"path/filepath"
+	"github.com/google/uuid"
 )
 
 type APIHandler struct {
-	db       JobCreator
-	queue    JobProducer
-	store    FileStorer
+	job      JobStore
+	queue    Producer
+	uploader Uploader
 	s3Bucket string
 }
 
-type JobCreator interface {
-	InsertJobReturnID(ctx context.Context, fileUrl string, jobStatus postgresdb.JobStatus) (uuid.UUID, error)
+type JobStore interface {
+	Create(ctx context.Context, jobID uuid.UUID, fileName string)  error
 }
 
-type JobProducer interface {
-	InsertJob(ctx context.Context, jobID string) error
+type Producer interface {
+	Produce(ctx context.Context, jobID string) error
 }
 
-type FileStorer interface {
+type Uploader interface {
 	Upload(ctx context.Context, file io.Reader, bucket, key, contentType string) error
 }
 
-func NewAPIHandler(db JobCreator, queue JobProducer, store FileStorer, s3Bucket string) *APIHandler {
+func NewAPIHandler(db JobStore, queue Producer, store Uploader, s3Bucket string) *APIHandler {
 	return &APIHandler{
-		db:       db,
+		job:      db,
 		queue:    queue,
-		store:    store,
+		uploader: store,
 		s3Bucket: s3Bucket,
 	}
 
@@ -43,6 +42,8 @@ func NewAPIHandler(db JobCreator, queue JobProducer, store FileStorer, s3Bucket 
 
 func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) {
 
+	
+	defer r.Body.Close()
 	const MAX_UPLOAD_SIZE = 5 << 20 // 5 MB
 
 	r.Body = http.MaxBytesReader(w, r.Body, MAX_UPLOAD_SIZE)
@@ -59,29 +60,29 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 	}
 	defer file.Close() // upload file
 
-	uniqueFileName := fmt.Sprintf("%s%s", uuid.New().String(), filepath.Ext(fileHeader.Filename))
 
-	err = h.store.Upload(r.Context(), file, h.s3Bucket, uniqueFileName, "application/pdf")
+	newJobID, _ := uuid.NewV7()
+
+
+	uniqueFileName := fmt.Sprintf("%s-%s", newJobID.String(), filepath.Ext(fileHeader.Filename))
+
+	err = h.uploader.Upload(r.Context(), file, h.s3Bucket, uniqueFileName, "application/pdf")
 
 	if err != nil {
 		http.Error(w, "Failed to upload file ", http.StatusInternalServerError)
 		return
 	}
 
-	jobID, err := h.db.InsertJobReturnID(r.Context(), uniqueFileName, postgresdb.JobStatus(postgresdb.Queued))
+	err = h.job.Create(r.Context(), newJobID, uniqueFileName)
 
 	if err != nil {
 		http.Error(w, "An error occurred while processing your resume", http.StatusInternalServerError)
 		return
 	}
-	if jobID == uuid.Nil {
-		http.Error(w, "An error occurred while processing your resume", http.StatusInternalServerError)
-		return
-	}
 
-	jobIDString := jobID.String()
+	jobIDString := newJobID.String()
 
-	err = h.queue.InsertJob(r.Context(), jobIDString)
+	err = h.queue.Produce(r.Context(), jobIDString)
 
 	if err != nil {
 		http.Error(w, "An error occurred while processing your resume", http.StatusInternalServerError)
@@ -95,6 +96,10 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *APIHandler) HandleViewResult(w http.ResponseWriter, r *http.Request) {
+
+	defer r.Body.Close()
+
+	
 
 	json.NewEncoder(w).Encode(map[string]string{"job_id": jobIDString,
 		"status":      jobStatus,

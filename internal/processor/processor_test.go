@@ -3,30 +3,31 @@ package processor
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
 	apperrors "job-matcher/internal/errors"
-	"job-matcher/internal/storage"
+	"job-matcher/internal/models"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type MockJobStore struct {
-	JobByIDFunc          func(ctx context.Context, id uuid.UUID) (*storage.Job, error)
-	UpdateJobStatusFunc  func(ctx context.Context, id uuid.UUID, status storage.JobStatus) error
-	SetContentWithIDFunc func(ctx context.Context, id uuid.UUID, content string) error
+	GetFunc          func(ctx context.Context, id uuid.UUID) (*models.Job, error)
+	UpdateStatusFunc func(ctx context.Context, id uuid.UUID, status models.JobStatus) error
+	UpdateResumeFunc func(ctx context.Context, id uuid.UUID, content string) error
 }
 
-func (m *MockJobStore) JobByID(ctx context.Context, jobID uuid.UUID) (*storage.Job, error) {
-	return m.JobByIDFunc(ctx, jobID)
+func (m *MockJobStore) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
+	return m.GetFunc(ctx, jobID)
 }
 
-func (m *MockJobStore) UpdateJobStatus(ctx context.Context, jobID uuid.UUID, jobStatus storage.JobStatus) error {
-	return m.UpdateJobStatusFunc(ctx, jobID, jobStatus)
+func (m *MockJobStore) UpdateStatus(ctx context.Context, jobID uuid.UUID, jobStatus models.JobStatus) error {
+	return m.UpdateStatusFunc(ctx, jobID, jobStatus)
 }
 
-func (m *MockJobStore) SetContentWithID(ctx context.Context, jobID uuid.UUID, resumeContent string) error {
-	return m.SetContentWithIDFunc(ctx, jobID, resumeContent)
+func (m *MockJobStore) UpdateResume(ctx context.Context, jobID uuid.UUID, resumeContent string) error {
+	return m.UpdateResumeFunc(ctx, jobID, resumeContent)
 }
 
 type MockFileFetcher struct {
@@ -72,15 +73,15 @@ func TestExponentialBackoff(t *testing.T) {
 
 func TestFetchJobWithRetrySuccessOnFirstAttempt(t *testing.T) {
 	jobID := uuid.New()
-	expectedJob := &storage.Job{ID: jobID, FileName: "test/file.pdf"}
+	expectedJob := &models.Job{ID: jobID, FileName: "test/file.pdf"}
 	calls := 0
 	mockDB := &MockJobStore{
-		JobByIDFunc: func(ctx context.Context, id uuid.UUID) (*storage.Job, error) {
+		GetFunc: func(ctx context.Context, id uuid.UUID) (*models.Job, error) {
 			calls++
 			return expectedJob, nil
 		},
 	}
-	processor := &JobProcessor{db: mockDB}
+	processor := &JobProcessor{job: mockDB}
 	job, err := processor.fetchJobWithRetry(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("fetchJobWithRetry failed unexpectedly: %v", err)
@@ -98,12 +99,12 @@ func TestFetchJobWithRetryFailsAfterMaxRetries(t *testing.T) {
 	attempts := 0
 	retryableErr := errors.New("temporary DB connection issue")
 	mockDB := &MockJobStore{
-		JobByIDFunc: func(ctx context.Context, id uuid.UUID) (*storage.Job, error) {
+		GetFunc: func(ctx context.Context, id uuid.UUID) (*models.Job, error) {
 			attempts++
 			return nil, retryableErr
 		},
 	}
-	processor := &JobProcessor{db: mockDB}
+	processor := &JobProcessor{job: mockDB}
 	job, err := processor.fetchJobWithRetry(context.Background(), jobID)
 	if attempts != 4 {
 		t.Errorf("Expected 4 attempts, got %d", attempts)
@@ -126,7 +127,7 @@ func TestUpdateJobWithRetryRetriesAndSucceeds(t *testing.T) {
 	jobID := uuid.New()
 	calls := 0
 	mockDB := &MockJobStore{
-		UpdateJobStatusFunc: func(ctx context.Context, id uuid.UUID, status storage.JobStatus) error {
+		UpdateStatusFunc: func(ctx context.Context, id uuid.UUID, status models.JobStatus) error {
 			calls++
 			if calls < 3 {
 				return errors.New("temp connection loss")
@@ -134,8 +135,8 @@ func TestUpdateJobWithRetryRetriesAndSucceeds(t *testing.T) {
 			return nil
 		},
 	}
-	processor := &JobProcessor{db: mockDB}
-	err := processor.updateJobWithRetry(context.Background(), jobID, storage.Completed)
+	processor := &JobProcessor{job: mockDB}
+	err := processor.updateJobWithRetry(context.Background(), jobID, models.Completed)
 	if err != nil {
 		t.Fatalf("updateJobWithRetry failed unexpectedly: %v", err)
 	}
@@ -148,13 +149,13 @@ func TestUpdateJobWithRetryPermanentFailure(t *testing.T) {
 	jobID := uuid.New()
 	calls := 0
 	mockDB := &MockJobStore{
-		UpdateJobStatusFunc: func(ctx context.Context, id uuid.UUID, status storage.JobStatus) error {
+		UpdateStatusFunc: func(ctx context.Context, id uuid.UUID, status models.JobStatus) error {
 			calls++
 			return apperrors.ErrPermanentFailure
 		},
 	}
-	processor := &JobProcessor{db: mockDB}
-	err := processor.updateJobWithRetry(context.Background(), jobID, storage.Processing)
+	processor := &JobProcessor{job: mockDB}
+	err := processor.updateJobWithRetry(context.Background(), jobID, models.Processing)
 	if err == nil {
 		t.Fatal("updateJobWithRetry expected to fail permanently, but succeeded")
 	}

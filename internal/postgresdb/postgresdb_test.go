@@ -2,11 +2,12 @@ package postgresdb_test
 
 import (
 	"context"
-	"github.com/google/uuid"
+	"job-matcher/internal/models"
 	"job-matcher/internal/postgresdb"
-	"job-matcher/internal/storage"
 	"os"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func setUpTestDB(t *testing.T) *postgresdb.Store {
@@ -41,7 +42,7 @@ func setUpTestDB(t *testing.T) *postgresdb.Store {
 	return db
 }
 
-func TestInsertJobAndGetIDSuccess(t *testing.T) {
+func TestCreateSuccess(t *testing.T) {
 
 	postgresDB := setUpTestDB(t)
 
@@ -49,7 +50,7 @@ func TestInsertJobAndGetIDSuccess(t *testing.T) {
 
 	resumeName := "https://example.com/resumes/johndoe.pdf"
 
-	jobID, err := postgresDB.InsertJobReturnID(ctx, resumeName, storage.Queued)
+	jobID, err := postgresDB.Create(ctx, resumeName, models.Queued)
 
 	if err != nil {
 

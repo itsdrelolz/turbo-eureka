@@ -2,15 +2,12 @@ package s3
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"io"
-	apperrors "job-matcher/internal/errors"
 )
 
 type FileStore struct {
@@ -67,28 +64,19 @@ func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, co
 	return nil
 }
 
-func (fs *FileStore) Download(ctx context.Context, bucket, key string) ([]byte, error) {
+func (fs *FileStore) Download(ctx context.Context, bucket, key string) (io.ReadCloser, error) {
 
 	result, err := fs.Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
-	var notFoundErr *types.NotFound
-
-	if errors.As(err, &notFoundErr) {
-		return nil, fmt.Errorf("file not found (404): %w", apperrors.ErrPermanentFailure)
-	}
+	
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to download file: %w", err)
 	}
 	defer result.Body.Close()
 
-	body, err := io.ReadAll(result.Body)
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to read object body from file: %w", err)
-	}
-
-	return body, nil
+	return result.Body, nil
 }

@@ -22,9 +22,9 @@ func TestHandleUploadResumeSuccess(t *testing.T) {
 	expectedDBResult := testUUID
 
 	expectedJobID := testUUID.String()
-	mockDB := new(mocks.MockJobCreator)
-	mockQueue := new(mocks.MockJobProducer)
-	mockStore := new(mocks.MockFileStorer)
+	mockDB := new(mocks.MockCreator)
+	mockQueue := new(mocks.MockProducer)
+	mockStore := new(mocks.MockFileUploader)
 
 	mockStore.On("Upload", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 

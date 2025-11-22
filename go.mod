@@ -10,7 +10,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/joho/godotenv v1.5.1
-	github.com/pgvector/pgvector-go v0.3.0
 	github.com/stretchr/testify v1.8.1
 	github.com/valkey-io/valkey-go v1.0.67
 	rsc.io/pdf v0.1.1

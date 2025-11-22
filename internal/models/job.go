@@ -45,7 +45,6 @@ func StringToJobStatus(s string) (JobStatus, error) {
 	}
 }
 
-
 func (s JobStatus) String() string {
 
 	switch s {

@@ -37,7 +37,7 @@ func TestInsertJobSuccess(t *testing.T) {
 	ctx := context.Background()
 	jobID := "test_job_id"
 
-	err := valkeyDB.InsertJob(ctx, jobID)
+	err := valkeyDB.Produce(ctx, jobID)
 	if err != nil {
 		t.Fatalf("Failed to insert job: %v", err)
 	}

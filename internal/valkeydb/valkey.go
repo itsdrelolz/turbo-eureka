@@ -33,7 +33,7 @@ func (v *ValkeyClient) Close() {
 }
 
 // This method should insert a job, and then update the job as pending in the postgres db
-func (v *ValkeyClient) InsertJob(ctx context.Context, jobID string) error {
+func (v *ValkeyClient) Produce(ctx context.Context, jobID string) error {
 
 	cmd := v.Client.B().Lpush().
 		Key("job-queue").
@@ -48,7 +48,7 @@ func (v *ValkeyClient) InsertJob(ctx context.Context, jobID string) error {
 	return nil
 }
 
-func (v *ValkeyClient) ConsumeJob(ctx context.Context) (string, error) {
+func (v *ValkeyClient) Consume(ctx context.Context) (string, error) {
 
 	cmd := v.Client.B().Brpop().
 		Key("job-queue").
