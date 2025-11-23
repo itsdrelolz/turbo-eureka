@@ -39,8 +39,6 @@ func (s *Store) Close() {
 
 func (s *Store) Create(ctx context.Context, jobID uuid.UUID, fileName string) error {
 
-
-
 	initalStatus := models.Queued
 
 	sql := `
@@ -57,19 +55,18 @@ func (s *Store) Create(ctx context.Context, jobID uuid.UUID, fileName string) er
 	)
 
 	if err != nil {
-		 fmt.Errorf("Query row failed with error: %w", err)
+		fmt.Errorf("Query row failed with error: %w", err)
 	}
 
 	return nil
 
 }
 
-func (s *Store) ProcessingJob(ctx context.Context, jobID, uuid uuid.UUID) error { 
+func (s *Store) ProcessingJob(ctx context.Context, jobID, uuid uuid.UUID) error {
 
 }
 
-func (s *Store) CompleteJob(ctx context.Context, jobID uuid.UUID, content string) error { 
-
+func (s *Store) CompleteJob(ctx context.Context, jobID uuid.UUID, content string) error {
 
 }
 func (s *Store) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
@@ -96,7 +93,6 @@ func (s *Store) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
 		&retrievedJob.CreatedAt,
 	)
 
-
 	if err != nil {
 		return &models.Job{}, fmt.Errorf("Failed to retrieve job with error: %w", err)
 	}
@@ -113,4 +109,42 @@ func (s *Store) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
 }
 
 
+func (s *Store) GetResult(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
 
+	var retrievedJob models.Job
+
+	// convert to string before sending back
+	var statusString string
+
+	sql := `
+        SELECT id, job_status, file_name, created_at, resume_content
+        FROM jobs
+        WHERE id = $1
+        `
+
+	err := s.Pool.QueryRow(
+		ctx,
+		sql,
+		jobID,
+	).Scan(
+		&retrievedJob.ID,
+		&statusString,
+		&retrievedJob.FileName,
+		&retrievedJob.CreatedAt,
+		&retrievedJob.ResumeText,
+	)
+
+	if err != nil {
+		return &models.Job{}, fmt.Errorf("Failed to retrieve job with error: %w", err)
+	}
+
+	jobStatus, err := models.StringToJobStatus(statusString)
+
+	if err != nil {
+		return nil, fmt.Errorf("database contains invalid job status string: %w", err)
+	}
+	retrievedJob.JobStatus = jobStatus
+
+	return &retrievedJob, nil
+
+}

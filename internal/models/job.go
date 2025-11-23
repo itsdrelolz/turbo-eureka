@@ -27,6 +27,8 @@ type Job struct {
 	FileName string
 
 	CreatedAt time.Time
+
+	ResumeText string
 }
 
 func StringToJobStatus(s string) (JobStatus, error) {

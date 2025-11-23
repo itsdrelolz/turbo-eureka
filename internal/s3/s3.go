@@ -66,17 +66,21 @@ func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, co
 
 func (fs *FileStore) Download(ctx context.Context, bucket, key string) (io.ReadCloser, error) {
 
+
+
+
 	result, err := fs.Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
-	
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to download file: %w", err)
 	}
 	defer result.Body.Close()
 
-
 	return result.Body, nil
 }
+
+
+

@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"job-matcher/internal/models"
 	"log"
 	"net/http"
 	"path/filepath"
+
 	"github.com/google/uuid"
 )
 
@@ -19,7 +21,8 @@ type APIHandler struct {
 }
 
 type JobStore interface {
-	Create(ctx context.Context, jobID uuid.UUID, fileName string)  error
+	Create(ctx context.Context, jobID uuid.UUID, fileName string) error
+	GetResult(ctx context.Context, jobID uuid.UUID) (*models.Job, error)
 }
 
 type Producer interface {
@@ -42,7 +45,6 @@ func NewAPIHandler(db JobStore, queue Producer, store Uploader, s3Bucket string)
 
 func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) {
 
-	
 	defer r.Body.Close()
 	const MAX_UPLOAD_SIZE = 5 << 20 // 5 MB
 
@@ -60,9 +62,7 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 	}
 	defer file.Close() // upload file
 
-
 	newJobID, _ := uuid.NewV7()
-
 
 	uniqueFileName := fmt.Sprintf("%s-%s", newJobID.String(), filepath.Ext(fileHeader.Filename))
 
@@ -99,10 +99,34 @@ func (h *APIHandler) HandleViewResult(w http.ResponseWriter, r *http.Request) {
 
 	defer r.Body.Close()
 
-	
+	jobIDString := r.URL.Query().Get("id")
 
+	if jobIDString == "" { 
+		http.Error(w, "Missing job ID. Please provide it as a query parameter: ?id=UUID", http.StatusBadRequest)
+        	return
+	}
+
+	jobID, err := uuid.Parse(jobIDString)
+
+	if err != nil {
+		http.Error(w, "Invalid job id format", http.StatusBadRequest)
+	}
+
+
+	jobData, err := h.job.GetResult(r.Context(), jobID)
+
+	if err != nil {
+        log.Printf("Error retrieving job %s: %v", jobIDString, err)
+        http.Error(w, "Job not found or database error.", http.StatusNotFound)
+        return
+    }
+
+
+	w.Header().Set("Content-Type", "application/json")
+
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"job_id": jobIDString,
-		"status":      jobStatus,
-		"resume_text": resumeText,
+		"status":      jobData.JobStatus.String(),
+		"resume_text": jobData.ResumeText,
 	})
 }

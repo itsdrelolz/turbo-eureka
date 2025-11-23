@@ -2,17 +2,23 @@ package main
 
 import (
 	"context"
-	"github.com/joho/godotenv"
 	"job-matcher/internal/api"
 	"job-matcher/internal/postgresdb"
 	"job-matcher/internal/s3"
 	"job-matcher/internal/valkeydb"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	slog.SetDefault(logger)
 
 	err := godotenv.Load()
 
