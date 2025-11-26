@@ -66,9 +66,6 @@ func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, co
 
 func (fs *FileStore) Download(ctx context.Context, bucket, key string) (io.ReadCloser, error) {
 
-
-
-
 	result, err := fs.Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
@@ -81,6 +78,3 @@ func (fs *FileStore) Download(ctx context.Context, bucket, key string) (io.ReadC
 
 	return result.Body, nil
 }
-
-
-

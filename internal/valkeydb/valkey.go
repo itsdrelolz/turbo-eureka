@@ -1,9 +1,12 @@
 package valkeydb
 
+
+
 import (
 	"context"
 	"fmt"
 	"github.com/valkey-io/valkey-go"
+	"github.com/google/uuid"
 )
 
 type ValkeyClient struct {
@@ -48,7 +51,7 @@ func (v *ValkeyClient) Produce(ctx context.Context, jobID string) error {
 	return nil
 }
 
-func (v *ValkeyClient) Consume(ctx context.Context) (string, error) {
+func (v *ValkeyClient) Consume(ctx context.Context) (uuid.UUID, error) {
 
 	cmd := v.Client.B().Brpop().
 		Key("job-queue").
@@ -60,10 +63,16 @@ func (v *ValkeyClient) Consume(ctx context.Context) (string, error) {
 	arr, err := res.AsStrSlice()
 
 	if err != nil {
-		return "", fmt.Errorf("failed to parse blocking right pop respose: %w", err)
+		return uuid.Nil, fmt.Errorf("failed to parse blocking right pop respose: %w", err)
 	}
 
 	queuedJob := arr[1]
 
-	return queuedJob, nil
+	jobID, err := uuid.Parse(queuedJob) 
+
+	if err != nil { 
+		return uuid.Nil, fmt.Errorf("Failed to parse, invalid UUID: %w", err)
+	}
+
+	return jobID, nil
 }

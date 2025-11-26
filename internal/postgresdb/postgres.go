@@ -62,7 +62,7 @@ func (s *Store) Create(ctx context.Context, jobID uuid.UUID, fileName string) er
 
 }
 
-func (s *Store) ProcessingJob(ctx context.Context, jobID, uuid uuid.UUID) error {
+func (s *Store) ProcessingJob(ctx context.Context, jobID uuid.UUID) error {
 
 }
 
@@ -107,7 +107,6 @@ func (s *Store) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
 	return &retrievedJob, nil
 
 }
-
 
 func (s *Store) GetResult(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
 

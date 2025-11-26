@@ -101,9 +101,9 @@ func (h *APIHandler) HandleViewResult(w http.ResponseWriter, r *http.Request) {
 
 	jobIDString := r.URL.Query().Get("id")
 
-	if jobIDString == "" { 
+	if jobIDString == "" {
 		http.Error(w, "Missing job ID. Please provide it as a query parameter: ?id=UUID", http.StatusBadRequest)
-        	return
+		return
 	}
 
 	jobID, err := uuid.Parse(jobIDString)
@@ -112,15 +112,13 @@ func (h *APIHandler) HandleViewResult(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid job id format", http.StatusBadRequest)
 	}
 
-
 	jobData, err := h.job.GetResult(r.Context(), jobID)
 
 	if err != nil {
-        log.Printf("Error retrieving job %s: %v", jobIDString, err)
-        http.Error(w, "Job not found or database error.", http.StatusNotFound)
-        return
-    }
-
+		log.Printf("Error retrieving job %s: %v", jobIDString, err)
+		http.Error(w, "Job not found or database error.", http.StatusNotFound)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 
