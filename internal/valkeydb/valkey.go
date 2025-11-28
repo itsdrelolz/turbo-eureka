@@ -1,12 +1,10 @@
 package valkeydb
 
-
-
 import (
 	"context"
 	"fmt"
-	"github.com/valkey-io/valkey-go"
 	"github.com/google/uuid"
+	"github.com/valkey-io/valkey-go"
 )
 
 type ValkeyClient struct {
@@ -20,12 +18,12 @@ func New(ctx context.Context, address string, password string) (*ValkeyClient, e
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("unable to create Valkey client: %w", err)
+		return nil, fmt.Errorf("ERROR: unable to create Valkey client: %w", err)
 	}
 
 	if err := client.Do(ctx, client.B().Ping().Build()).Error(); err != nil {
 		client.Close()
-		return nil, fmt.Errorf("unable to ping Valkey: %w", err)
+		return nil, fmt.Errorf("ERROR: unable to ping Valkey: %w", err)
 	}
 
 	return &ValkeyClient{Client: client}, nil
@@ -45,7 +43,7 @@ func (v *ValkeyClient) Produce(ctx context.Context, jobID string) error {
 
 	if _, err := v.Client.Do(ctx, cmd).AsInt64(); err != nil {
 
-		return fmt.Errorf("unable to add job (%s) to the queue: %w", jobID, err)
+		return fmt.Errorf("ERROR: unable to add job (%s) to the queue: %w", jobID, err)
 	}
 
 	return nil
@@ -63,15 +61,15 @@ func (v *ValkeyClient) Consume(ctx context.Context) (uuid.UUID, error) {
 	arr, err := res.AsStrSlice()
 
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to parse blocking right pop respose: %w", err)
+		return uuid.Nil, fmt.Errorf("ERROR: failed to parse blocking right pop respose: %w", err)
 	}
 
 	queuedJob := arr[1]
 
-	jobID, err := uuid.Parse(queuedJob) 
+	jobID, err := uuid.Parse(queuedJob)
 
-	if err != nil { 
-		return uuid.Nil, fmt.Errorf("Failed to parse, invalid UUID: %w", err)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("ERROR: Failed to parse, invalid UUID: %w", err)
 	}
 
 	return jobID, nil

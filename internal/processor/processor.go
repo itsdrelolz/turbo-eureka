@@ -1,3 +1,4 @@
+
 package processor
 
 import (
@@ -5,11 +6,16 @@ import (
 	"io"
 	"job-matcher/internal/models"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 )
 
+const ( 
+	numWorkers = 5
+	buffLen = numWorkers * 2
+)
 type Consumer interface {
 	Consume(ctx context.Context) (uuid.UUID, error)
 }
@@ -41,19 +47,33 @@ func NewJobProcessor(db JobStore, queue Consumer, s3 Downloader, bucket string) 
 // This function should start other functions 
 
 
-func (p *JobProcessor) Start(ctx context.Context) { 
+func (p *JobProcessor) Run(ctx context.Context) { 
 
-	select { 
+	jobChan := make(chan uuid.UUID, buffLen)
 
+	var wg sync.WaitGroup
 
+	
+	go p.startConsumer(ctx, jobChan)
 
-
-
+	for i := 1; i < numWorkers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			p.startWorkers(ctx, workerID, jobChan)
+		}(i)
 	}
 
+	<-ctx.Done() 
+	log.Printf("Shutdown signal received. Waiting for workers to finish...")
+
+
+
+	wg.Wait()
+	log.Printf("All workers stopped. Job processor shut down")
 }
 
-func (p *JobProcessor) startConsumer(ctx context.Context, jobChan chan uuid.UUID) { 
+func (p *JobProcessor) startConsumer(ctx context.Context, jobChan chan<- uuid.UUID) { 
 
 	defer close(jobChan)
 
@@ -65,13 +85,13 @@ func (p *JobProcessor) startConsumer(ctx context.Context, jobChan chan uuid.UUID
 
 		if err != nil { 
 			log.Printf("error consuming from job queue with err: %w, retrying..", err)
-			time.Sleep(5 % time.Second)
+			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		select { 
-			case jobChan <- jobID:
-			// job successfully sent to work 
+			// job successfully sent to worker 
+			case jobChan <- jobID:	
 			case <-ctx.Done(): 
 				log.Printf("Job consumer stopping") 
 				return 
@@ -79,21 +99,37 @@ func (p *JobProcessor) startConsumer(ctx context.Context, jobChan chan uuid.UUID
 	}
 }
 
+func (p *JobProcessor) startWorkers(ctx context.Context, workerID int, jobChan <-chan uuid.UUID) { 
+
+	log.Printf("Worker: #%d started", workerID) 
 
 
+	for jobID := range jobChan { 
+		p.processJob(ctx, jobID)
+	}
+	log.Printf("Worker #%d stopped.", workerID)
 
+}
 
-
-
-
-
-
-
-
-
+func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 
 
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

@@ -30,7 +30,7 @@ func NewFileStore(ctx context.Context, conf S3Config) (*FileStore, error) {
 		config.WithCredentialsProvider(creds),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load s3 config: %w", err)
+		return nil, fmt.Errorf("ERROR: failed to load s3 config: %w", err)
 	}
 
 	if conf.EndpointURL != "" {
@@ -48,7 +48,7 @@ func NewFileStore(ctx context.Context, conf S3Config) (*FileStore, error) {
 func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, contentType string) error {
 
 	if file == nil {
-		return fmt.Errorf("empty file, invalid input")
+		return fmt.Errorf("ERROR: empty file, invalid input")
 	}
 
 	_, err := fs.Client.PutObject(ctx, &s3.PutObjectInput{
@@ -59,7 +59,7 @@ func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, co
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to upload file: %w", err)
+		return fmt.Errorf("ERROR: failed to upload file: %w", err)
 	}
 	return nil
 }
@@ -72,7 +72,7 @@ func (fs *FileStore) Download(ctx context.Context, bucket, key string) (io.ReadC
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to download file: %w", err)
+		return nil, fmt.Errorf("ERROR: failed to download file: %w", err)
 	}
 	defer result.Body.Close()
 

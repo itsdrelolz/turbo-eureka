@@ -16,18 +16,18 @@ type Store struct {
 
 func New(ctx context.Context, connString string) (*Store, error) {
 	if connString == "" {
-		return nil, fmt.Errorf("database connection string is required")
+		return nil, fmt.Errorf("ERROR: database connection string is required")
 	}
 
 	config, err := pgxpool.ParseConfig(connString)
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create connection pool: %w", err)
+		return nil, fmt.Errorf("ERROR: unable to create connection pool: %w", err)
 	}
 
 	if err := pool.Ping(ctx); err != nil {
-		return nil, fmt.Errorf("unable to ping database: %w", err)
+		return nil, fmt.Errorf("ERROR: unable to ping database: %w", err)
 	}
 
 	return &Store{Pool: pool}, nil
@@ -55,7 +55,7 @@ func (s *Store) Create(ctx context.Context, jobID uuid.UUID, fileName string) er
 	)
 
 	if err != nil {
-		fmt.Errorf("Query row failed with error: %w", err)
+		fmt.Errorf("ERROR: Query row failed with error: %w", err)
 	}
 
 	return nil
@@ -94,13 +94,13 @@ func (s *Store) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
 	)
 
 	if err != nil {
-		return &models.Job{}, fmt.Errorf("Failed to retrieve job with error: %w", err)
+		return &models.Job{}, fmt.Errorf("ERROR: Failed to retrieve job with error: %w", err)
 	}
 
 	jobStatus, err := models.StringToJobStatus(statusString)
 
 	if err != nil {
-		return nil, fmt.Errorf("database contains invalid job status string: %w", err)
+		return nil, fmt.Errorf("ERROR: database contains invalid job status string: %w", err)
 	}
 	retrievedJob.JobStatus = jobStatus
 
@@ -134,13 +134,13 @@ func (s *Store) GetResult(ctx context.Context, jobID uuid.UUID) (*models.Job, er
 	)
 
 	if err != nil {
-		return &models.Job{}, fmt.Errorf("Failed to retrieve job with error: %w", err)
+		return &models.Job{}, fmt.Errorf("ERROR: Failed to retrieve job with error: %w", err)
 	}
 
 	jobStatus, err := models.StringToJobStatus(statusString)
 
 	if err != nil {
-		return nil, fmt.Errorf("database contains invalid job status string: %w", err)
+		return nil, fmt.Errorf("ERROR: database contains invalid job status string: %w", err)
 	}
 	retrievedJob.JobStatus = jobStatus
 
