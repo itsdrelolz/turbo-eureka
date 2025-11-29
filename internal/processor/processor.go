@@ -1,4 +1,3 @@
-
 package processor
 
 import (
@@ -8,14 +7,15 @@ import (
 	"log"
 	"sync"
 	"time"
-
+	"rsc.io/pdf"
 	"github.com/google/uuid"
 )
 
-const ( 
+const (
 	numWorkers = 5
-	buffLen = numWorkers * 2
+	buffLen    = numWorkers * 2
 )
+
 type Consumer interface {
 	Consume(ctx context.Context) (uuid.UUID, error)
 }
@@ -42,18 +42,15 @@ func NewJobProcessor(db JobStore, queue Consumer, s3 Downloader, bucket string) 
 	return &JobProcessor{db: db, queue: queue, s3: s3, bucket: bucket}
 }
 
-
 // TODO: Runner function for the job processor functionality
-// This function should start other functions 
+// This function should start other functions
 
-
-func (p *JobProcessor) Run(ctx context.Context) { 
+func (p *JobProcessor) Run(ctx context.Context) {
 
 	jobChan := make(chan uuid.UUID, buffLen)
 
 	var wg sync.WaitGroup
 
-	
 	go p.startConsumer(ctx, jobChan)
 
 	for i := 1; i < numWorkers; i++ {
@@ -64,47 +61,42 @@ func (p *JobProcessor) Run(ctx context.Context) {
 		}(i)
 	}
 
-	<-ctx.Done() 
+	<-ctx.Done()
 	log.Printf("Shutdown signal received. Waiting for workers to finish...")
-
-
 
 	wg.Wait()
 	log.Printf("All workers stopped. Job processor shut down")
 }
 
-func (p *JobProcessor) startConsumer(ctx context.Context, jobChan chan<- uuid.UUID) { 
+func (p *JobProcessor) startConsumer(ctx context.Context, jobChan chan<- uuid.UUID) {
 
 	defer close(jobChan)
 
 	log.Printf("Job processor has started, waiting for jobs...")
 
-
 	for {
 		jobID, err := p.queue.Consume(ctx)
 
-		if err != nil { 
+		if err != nil {
 			log.Printf("error consuming from job queue with err: %w, retrying..", err)
 			time.Sleep(5 * time.Second)
 			continue
 		}
-
-		select { 
-			// job successfully sent to worker 
-			case jobChan <- jobID:	
-			case <-ctx.Done(): 
-				log.Printf("Job consumer stopping") 
-				return 
+		select {
+		// job successfully sent to worker
+		case jobChan <- jobID:
+		case <-ctx.Done():
+			log.Printf("Job consumer stopping")
+			return
 		}
 	}
 }
 
-func (p *JobProcessor) startWorkers(ctx context.Context, workerID int, jobChan <-chan uuid.UUID) { 
+func (p *JobProcessor) startWorkers(ctx context.Context, workerID int, jobChan <-chan uuid.UUID) {
 
-	log.Printf("Worker: #%d started", workerID) 
+	log.Printf("Worker: #%d started", workerID)
 
-
-	for jobID := range jobChan { 
+	for jobID := range jobChan {
 		p.processJob(ctx, jobID)
 	}
 	log.Printf("Worker #%d stopped.", workerID)
@@ -115,21 +107,31 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 
 
 
+	err := p.db.ProcessingJob(ctx, jobID) 
+
+	if err != nil { 
+		log.Printf("ERROR: %w", err)
+	}
+
+	jobInfo, err := p.db.Get(ctx, jobID) 
+
+	if err != nil { 
+		log.Printf("ERROR: %w", err) 
+	}
+
+
+	resume, err := p.s3.Download(ctx, p.bucket, jobInfo.FileName)
+
+	if err != nil { 
+		log.Printf("ERROR: %w", err)
+	}
+
+
 }
 
 
+func (p *JobProcessor) extractText(ctx context.Context, resume io.ReadCloser) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+}
