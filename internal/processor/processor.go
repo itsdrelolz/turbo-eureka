@@ -1,14 +1,19 @@
 package processor
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"job-matcher/internal/models"
 	"log"
+	"strings"
 	"sync"
 	"time"
-	"rsc.io/pdf"
+	"unicode"
+
 	"github.com/google/uuid"
+	"rsc.io/pdf"
 )
 
 const (
@@ -47,17 +52,17 @@ func NewJobProcessor(db JobStore, queue Consumer, s3 Downloader, bucket string) 
 
 func (p *JobProcessor) Run(ctx context.Context) {
 
-	jobChan := make(chan uuid.UUID, buffLen)
+	workerQueue := make(chan uuid.UUID, buffLen)
 
 	var wg sync.WaitGroup
 
-	go p.startConsumer(ctx, jobChan)
+	go p.startConsumer(ctx, workerQueue)
 
 	for i := 1; i < numWorkers; i++ {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			p.startWorkers(ctx, workerID, jobChan)
+			p.startWorkers(ctx, workerID, workerQueue)
 		}(i)
 	}
 
@@ -68,9 +73,9 @@ func (p *JobProcessor) Run(ctx context.Context) {
 	log.Printf("All workers stopped. Job processor shut down")
 }
 
-func (p *JobProcessor) startConsumer(ctx context.Context, jobChan chan<- uuid.UUID) {
+func (p *JobProcessor) startConsumer(ctx context.Context, workerQueue chan<- uuid.UUID) {
 
-	defer close(jobChan)
+	defer close(workerQueue)
 
 	log.Printf("Job processor has started, waiting for jobs...")
 
@@ -84,7 +89,7 @@ func (p *JobProcessor) startConsumer(ctx context.Context, jobChan chan<- uuid.UU
 		}
 		select {
 		// job successfully sent to worker
-		case jobChan <- jobID:
+		case workerQueue <- jobID:
 		case <-ctx.Done():
 			log.Printf("Job consumer stopping")
 			return
@@ -92,11 +97,11 @@ func (p *JobProcessor) startConsumer(ctx context.Context, jobChan chan<- uuid.UU
 	}
 }
 
-func (p *JobProcessor) startWorkers(ctx context.Context, workerID int, jobChan <-chan uuid.UUID) {
+func (p *JobProcessor) startWorkers(ctx context.Context, workerID int, workerQueue <-chan uuid.UUID) {
 
 	log.Printf("Worker: #%d started", workerID)
 
-	for jobID := range jobChan {
+	for jobID := range workerQueue {
 		p.processJob(ctx, jobID)
 	}
 	log.Printf("Worker #%d stopped.", workerID)
@@ -104,8 +109,6 @@ func (p *JobProcessor) startWorkers(ctx context.Context, workerID int, jobChan <
 }
 
 func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
-
-
 
 	err := p.db.ProcessingJob(ctx, jobID) 
 
@@ -127,11 +130,73 @@ func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 	}
 
 
+
+	text, err := p.extractText(ctx, resume)
+
+
+	if err != nil { 
+		log.Printf("ERROR: %w", err)
+	}
+
+
+	err = p.db.CompleteJob(ctx, jobID, text)
+
+	if err != nil { 
+		log.Printf("ERROR: %w", err) 
+	}
+
 }
 
 
-func (p *JobProcessor) extractText(ctx context.Context, resume io.ReadCloser) {
+func (p *JobProcessor) extractText(ctx context.Context, resume io.ReadCloser) (string, error) {
+
+	const replacementChar = string(unicode.ReplacementChar)
+
+	fileBytes, err := io.ReadAll(resume)
+	
+	if err != nil { 
+		return "", fmt.Errorf("Failed to read file stream: %w", err) 
+	}
+	defer resume.Close()
+
+	readerAt := bytes.NewReader(fileBytes)
+
+
+	reader, err := pdf.NewReader(readerAt, int64(len(fileBytes)))
+
+	if err != nil { 
+		return "", fmt.Errorf("Failed to open file: %w", err)
+	}
+
+	var result strings.Builder
+
+	numPages := reader.NumPage()
+
+	for i := 1; i <= numPages; i++ {
+		page := reader.Page(i)
+
+		content := page.Content()
+
+		text := content.Text
+
+		for _, t := range text {
+			result.WriteString(t.S)
+		} 
+	result.WriteString("\n")
+}
+
+	// Remove all occurences of the replacment char in the resulting string
+	return strings.ReplaceAll(result.String(), replacementChar, "") , nil
+
+}
+
+
+// Cleanup function 
+/*
+
+func (p *JobProcessor) cleanUp(ctx context.Context, deadLetterQueue chan<- uuid.UUID) error {
 
 
 
 }
+*/
