@@ -21,7 +21,7 @@ type APIHandler struct {
 }
 
 type JobStore interface {
-	Create(ctx context.Context, jobID uuid.UUID, fileName string) error
+	Create(ctx context.Context, jobID uuid.UUID, fileName string)
 	GetResult(ctx context.Context, jobID uuid.UUID) (*models.Job, error)
 }
 
@@ -73,7 +73,7 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err = h.job.Create(r.Context(), newJobID, uniqueFileName)
+	h.job.Create(r.Context(), newJobID, uniqueFileName)
 
 	if err != nil {
 		http.Error(w, "An error occurred while processing your resume", http.StatusInternalServerError)

@@ -37,7 +37,7 @@ func (s *Store) Close() {
 	s.Pool.Close()
 }
 
-func (s *Store) Create(ctx context.Context, jobID uuid.UUID, fileName string) error {
+func (s *Store) Create(ctx context.Context, jobID uuid.UUID, fileName string) {
 
 	initalStatus := models.Queued
 
@@ -46,7 +46,7 @@ func (s *Store) Create(ctx context.Context, jobID uuid.UUID, fileName string) er
 		VALUES ($1, $2, $3)
 		`
 
-	err := s.Pool.QueryRow(
+	s.Pool.QueryRow(
 		ctx,
 		sql,
 		jobID,
@@ -54,21 +54,23 @@ func (s *Store) Create(ctx context.Context, jobID uuid.UUID, fileName string) er
 		initalStatus.String(),
 	)
 
-	if err != nil {
-		fmt.Errorf("ERROR: Query row failed with error: %w", err)
-	}
-
-	return nil
-
 }
 
 func (s *Store) ProcessingJob(ctx context.Context, jobID uuid.UUID) error {
 
+	return nil
 }
 
 func (s *Store) CompleteJob(ctx context.Context, jobID uuid.UUID, content string) error {
 
+	return nil
 }
+
+func (s *Store) FailJob(ctx context.Context, jobID uuid.UUID) error {
+
+	return nil
+}
+
 func (s *Store) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
 
 	var retrievedJob models.Job

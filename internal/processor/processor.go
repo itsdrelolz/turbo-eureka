@@ -32,6 +32,8 @@ type Downloader interface {
 type JobStore interface {
 	ProcessingJob(ctx context.Context, jobID uuid.UUID) error
 
+	FailJob(ctx context.Context, jobID uuid.UUID) error
+
 	CompleteJob(ctx context.Context, jobID uuid.UUID, content string) error
 
 	Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error)
@@ -59,11 +61,9 @@ func (p *JobProcessor) Run(ctx context.Context) {
 	go p.startConsumer(ctx, workerQueue)
 
 	for i := 1; i < numWorkers; i++ {
-		wg.Add(1)
-		go func(workerID int) {
-			defer wg.Done()
-			p.startWorkers(ctx, workerID, workerQueue)
-		}(i)
+		wg.Go(func() {
+			p.startWorkers(ctx, i, workerQueue)
+		})
 	}
 
 	<-ctx.Done()
@@ -83,7 +83,7 @@ func (p *JobProcessor) startConsumer(ctx context.Context, workerQueue chan<- uui
 		jobID, err := p.queue.Consume(ctx)
 
 		if err != nil {
-			log.Printf("error consuming from job queue with err: %w, retrying..", err)
+			log.Printf("error consuming from job queue with err: %v, retrying..", err)
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -110,61 +110,59 @@ func (p *JobProcessor) startWorkers(ctx context.Context, workerID int, workerQue
 
 func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
 
-	err := p.db.ProcessingJob(ctx, jobID) 
+	err := p.db.ProcessingJob(ctx, jobID)
 
-	if err != nil { 
-		log.Printf("ERROR: %w", err)
+	if err != nil {
+		log.Printf("ERROR: %v", err)
 	}
 
-	jobInfo, err := p.db.Get(ctx, jobID) 
+	jobInfo, err := p.db.Get(ctx, jobID)
 
-	if err != nil { 
-		log.Printf("ERROR: %w", err) 
+	if err != nil {
+		log.Printf("ERROR: %v", err)
 	}
-
 
 	resume, err := p.s3.Download(ctx, p.bucket, jobInfo.FileName)
 
-	if err != nil { 
-		log.Printf("ERROR: %w", err)
+	if err != nil {
+		log.Printf("ERROR: %v", err)
+		p.db.FailJob(ctx, jobID)
+		return
 	}
 
+	text, err := p.extractText(resume)
 
-
-	text, err := p.extractText(ctx, resume)
-
-
-	if err != nil { 
-		log.Printf("ERROR: %w", err)
+	if err != nil {
+		log.Printf("ERROR: %v", err)
+		return
 	}
-
 
 	err = p.db.CompleteJob(ctx, jobID, text)
 
-	if err != nil { 
-		log.Printf("ERROR: %w", err) 
+	if err != nil {
+		log.Printf("ERROR: %v", err)
 	}
 
 }
 
+func (p *JobProcessor) extractText(resume io.ReadCloser) (string, error) {
 
-func (p *JobProcessor) extractText(ctx context.Context, resume io.ReadCloser) (string, error) {
-
+	// identifier for unreadable character common in output
+	// this character will be removed from the output
 	const replacementChar = string(unicode.ReplacementChar)
 
 	fileBytes, err := io.ReadAll(resume)
-	
-	if err != nil { 
-		return "", fmt.Errorf("Failed to read file stream: %w", err) 
+
+	if err != nil {
+		return "", fmt.Errorf("Failed to read file stream: %w", err)
 	}
 	defer resume.Close()
 
 	readerAt := bytes.NewReader(fileBytes)
 
-
 	reader, err := pdf.NewReader(readerAt, int64(len(fileBytes)))
 
-	if err != nil { 
+	if err != nil {
 		return "", fmt.Errorf("Failed to open file: %w", err)
 	}
 
@@ -181,17 +179,16 @@ func (p *JobProcessor) extractText(ctx context.Context, resume io.ReadCloser) (s
 
 		for _, t := range text {
 			result.WriteString(t.S)
-		} 
-	result.WriteString("\n")
-}
+		}
+		result.WriteString("\n")
+	}
 
 	// Remove all occurences of the replacment char in the resulting string
-	return strings.ReplaceAll(result.String(), replacementChar, "") , nil
+	return strings.ReplaceAll(result.String(), replacementChar, ""), nil
 
 }
 
-
-// Cleanup function 
+// Cleanup function
 /*
 
 func (p *JobProcessor) cleanUp(ctx context.Context, deadLetterQueue chan<- uuid.UUID) error {

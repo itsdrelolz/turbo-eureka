@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/joho/godotenv"
 	"job-matcher/internal/api"
 	"job-matcher/internal/postgresdb"
 	"job-matcher/internal/s3"
@@ -10,8 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-
-	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -33,6 +32,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize postgresdb: %v", err)
 	}
+
 	defer db.Close()
 
 	valkey, err := valkeydb.New(ctx, os.Getenv("VALKEY_URL"), os.Getenv("VALKEY_PASSWORD"))
@@ -57,6 +57,7 @@ func main() {
 	}
 
 	bucketName := os.Getenv("S3_BUCKET_NAME")
+
 	if bucketName == "" {
 		log.Fatal("S3_BUCKET_NAME is not set")
 	}
