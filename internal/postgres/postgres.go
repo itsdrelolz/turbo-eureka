@@ -3,9 +3,9 @@ package postgresdb
 import (
 	"context"
 	"fmt"
-	"job-matcher/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"job-matcher/internal/models"
 )
 
 type Store struct {
@@ -55,7 +55,6 @@ func (s *Store) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
 
 	var retrievedJob models.Job
 
-
 	sql := `
         SELECT id, file_name
         FROM jobs
@@ -75,7 +74,6 @@ func (s *Store) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
 		return &models.Job{}, fmt.Errorf("ERROR: Failed to retrieve job with error: %w", err)
 	}
 
-
 	if err != nil {
 		return nil, fmt.Errorf("ERROR: database contains invalid job status string: %w", err)
 	}
@@ -84,4 +82,41 @@ func (s *Store) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
 }
 
 
-func (s *Store) 
+func (s *Store) CompleteJob(ctx context.Context, jobID uuid.UUID, data string) error {
+    sql := `UPDATE jobs 
+              SET status = 'COMPLETED', result_text = $1, updated_at = NOW() 
+              WHERE id = $2`
+
+	err := s.Pool.QueryRow(
+		ctx,
+		sql,
+		jobID,
+	)
+
+	if err != nil { 
+		return fmt.Errorf(err) 
+	}
+
+	return nil
+
+}
+
+func (s *Store) FailedJob(ctx context.Context, jobID uuid.UUID, errMsg error) error {
+    sql := `UPDATE jobs 
+              SET status = 'FAILED', error_message = $1, updated_at = NOW() 
+              WHERE id = $2`
+	err := s.Pool.QueryRow(
+		ctx,
+		sql,
+		errMsg.Error(),
+		jobID,
+	)
+
+	if err != nil { 
+		return fmt.Errorf(err) 
+	}
+
+	return nil
+
+
+}

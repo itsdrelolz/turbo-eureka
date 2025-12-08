@@ -4,9 +4,9 @@ import (
 	"context"
 	"github.com/joho/godotenv"
 	"job-matcher/internal/api"
-	"job-matcher/internal/postgresdb"
+	"job-matcher/internal/postgres"
+	"job-matcher/internal/redis"
 	"job-matcher/internal/s3"
-	"job-matcher/internal/valkeydb"
 	"log"
 	"log/slog"
 	"net/http"
@@ -35,13 +35,13 @@ func main() {
 
 	defer db.Close()
 
-	valkey, err := valkeydb.New(ctx, os.Getenv("VALKEY_URL"), os.Getenv("VALKEY_PASSWORD"))
+	redis, err := redis.New(ctx, os.Getenv("VALKEY_URL"), os.Getenv("VALKEY_PASSWORD"))
 
 	if err != nil {
 		log.Fatalf("Failed to initialize valkey: %v", err)
 	}
 
-	defer valkey.Close()
+	defer redis.Client.Close()
 
 	s3Conf := s3.S3Config{
 		EndpointURL: os.Getenv("S3_ENDPOINT_URL"),
@@ -64,7 +64,7 @@ func main() {
 
 	log.Println("S3 FileStore initialized")
 
-	apiHandler := api.NewAPIHandler(db, valkey, s3Store, bucketName)
+	apiHandler := api.NewAPIHandler(db, redis, s3Store, bucketName)
 
 	router := api.NewRouter(apiHandler)
 

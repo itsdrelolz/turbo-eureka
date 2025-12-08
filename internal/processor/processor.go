@@ -9,17 +9,28 @@ import (
 	"log"
 	"strings"
 	"sync"
-	"time"
 	"unicode"
-
 	"github.com/google/uuid"
 	"rsc.io/pdf"
 )
 
 const (
 	numWorkers = 5
-	buffLen    = numWorkers * 2
 )
+
+type EventType int
+
+const (
+	JobFailed EventType = iota
+	JobCompleted
+)
+
+type JobEvent struct {
+	JobID uuid.UUID
+	Type  EventType
+	Data  string
+	Err   error
+}
 
 type Consumer interface {
 	Consume(ctx context.Context) (uuid.UUID, error)
@@ -30,13 +41,9 @@ type Downloader interface {
 }
 
 type JobStore interface {
-	ProcessingJob(ctx context.Context, jobID uuid.UUID) error
-
-	FailJob(ctx context.Context, jobID uuid.UUID) error
-
-	CompleteJob(ctx context.Context, jobID uuid.UUID, content string) error
-
 	Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error)
+	CompleteJob(ctx context.Context, jobID uuid.UUID, data string) error
+	FailJob(ctx context.Context, jobID uuid.UUID, errMsg error) error 
 }
 type JobProcessor struct {
 	db     JobStore
@@ -49,100 +56,83 @@ func NewJobProcessor(db JobStore, queue Consumer, s3 Downloader, bucket string) 
 	return &JobProcessor{db: db, queue: queue, s3: s3, bucket: bucket}
 }
 
-// TODO: Runner function for the job processor functionality
-// This function should start other functions
-
+// Function implements two waitgroups, one for the main workers, and one for handling db writes
+// this prevents potential dataloss by allowing the database transactions to finish before closing the channel
 func (p *JobProcessor) Run(ctx context.Context) {
 
-	workerQueue := make(chan uuid.UUID, buffLen)
+	results := make(chan JobEvent, numWorkers)
 
-	var wg sync.WaitGroup
+	var workerWg sync.WaitGroup
+	var aggWg sync.WaitGroup
 
-	go p.startConsumer(ctx, workerQueue)
+	aggWg.Go(func() {
+		p.aggregator(results)
+	})
 
-	for i := 1; i < numWorkers; i++ {
-		wg.Go(func() {
-			p.startWorkers(ctx, i, workerQueue)
+	for i := 0; i < numWorkers; i++ {
+		workerWg.Go(func() {
+			p.startWorker(ctx, results)
 		})
 	}
+	workerWg.Wait()
 
-	<-ctx.Done()
-	log.Printf("Shutdown signal received. Waiting for workers to finish...")
+	close(results)
 
-	wg.Wait()
-	log.Printf("All workers stopped. Job processor shut down")
+	aggWg.Wait()
 }
 
-func (p *JobProcessor) startConsumer(ctx context.Context, workerQueue chan<- uuid.UUID) {
-
-	defer close(workerQueue)
-
-	log.Printf("Job processor has started, waiting for jobs...")
+func (p *JobProcessor) startWorker(ctx context.Context, result chan<- JobEvent) {
 
 	for {
-		jobID, err := p.queue.Consume(ctx)
-
-		if err != nil {
-			log.Printf("error consuming from job queue with err: %v, retrying..", err)
-			time.Sleep(5 * time.Second)
-			continue
-		}
 		select {
-		// job successfully sent to worker
-		case workerQueue <- jobID:
 		case <-ctx.Done():
-			log.Printf("Job consumer stopping")
 			return
+		default:
+			jobID, err := p.queue.Consume(ctx)
+
+			if err != nil {
+				log.Printf("Failed to pull job from queue with err: %w", err)
+			}
+
+			jobData, err := p.db.Get(ctx, jobID)
+
+			if err != nil {
+				result <- JobEvent{JobID: jobID, Type: JobFailed, Err: err}
+				continue
+			}
+
+			resume, err := p.s3.Download(ctx, p.bucket, jobData.FileName)
+
+			if err != nil {
+				result <- JobEvent{JobID: jobID, Type: JobFailed, Err: err}
+				continue
+			}
+
+			text, err := p.extractText(resume)
+
+			if err != nil {
+				result <- JobEvent{JobID: jobID, Type: JobFailed, Err: err}
+				continue
+			}
+
+			result <- JobEvent{JobID: jobID, Type: JobCompleted, Data: text}
 		}
 	}
 }
 
-func (p *JobProcessor) startWorkers(ctx context.Context, workerID int, workerQueue <-chan uuid.UUID) {
+func (p *JobProcessor) aggregator(events <-chan JobEvent) {
 
-	log.Printf("Worker: #%d started", workerID)
+	ctx := context.Background()
 
-	for jobID := range workerQueue {
-		p.processJob(ctx, jobID)
+	for evt := range events {
+		switch evt.Type {
+		case JobCompleted:
+			p.db.CompleteJob(ctx, evt.JobID, evt.Data)
+
+		case JobFailed:
+			p.db.FailJob(ctx, evt.JobID, evt.Err)
+		}
 	}
-	log.Printf("Worker #%d stopped.", workerID)
-
-}
-
-func (p *JobProcessor) processJob(ctx context.Context, jobID uuid.UUID) {
-
-	err := p.db.ProcessingJob(ctx, jobID)
-
-	if err != nil {
-		log.Printf("ERROR: %v", err)
-	}
-
-	jobInfo, err := p.db.Get(ctx, jobID)
-
-	if err != nil {
-		log.Printf("ERROR: %v", err)
-	}
-
-	resume, err := p.s3.Download(ctx, p.bucket, jobInfo.FileName)
-
-	if err != nil {
-		log.Printf("ERROR: %v", err)
-		p.db.FailJob(ctx, jobID)
-		return
-	}
-
-	text, err := p.extractText(resume)
-
-	if err != nil {
-		log.Printf("ERROR: %v", err)
-		return
-	}
-
-	err = p.db.CompleteJob(ctx, jobID, text)
-
-	if err != nil {
-		log.Printf("ERROR: %v", err)
-	}
-
 }
 
 func (p *JobProcessor) extractText(resume io.ReadCloser) (string, error) {
@@ -156,6 +146,7 @@ func (p *JobProcessor) extractText(resume io.ReadCloser) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("Failed to read file stream: %w", err)
 	}
+
 	defer resume.Close()
 
 	readerAt := bytes.NewReader(fileBytes)
@@ -187,13 +178,3 @@ func (p *JobProcessor) extractText(resume io.ReadCloser) (string, error) {
 	return strings.ReplaceAll(result.String(), replacementChar, ""), nil
 
 }
-
-// Cleanup function
-/*
-
-func (p *JobProcessor) cleanUp(ctx context.Context, deadLetterQueue chan<- uuid.UUID) error {
-
-
-
-}
-*/

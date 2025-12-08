@@ -37,7 +37,7 @@ func (v *RedisClient) Produce(ctx context.Context, jobID uuid.UUID) error {
 
 	JobID := jobID.String()
 
-	 err := v.Client.LPush(ctx, "queue:pending", JobID).Err()
+	err := v.Client.LPush(ctx, "queue:pending", JobID).Err()
 
 	if err != nil {
 		return fmt.Errorf("ERROR: Failed to push job into redis queue with: %w", err)

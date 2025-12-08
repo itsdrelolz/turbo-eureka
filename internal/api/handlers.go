@@ -26,7 +26,7 @@ type JobStore interface {
 }
 
 type Producer interface {
-	Produce(ctx context.Context, jobID string) error
+	Produce(ctx context.Context, jobID uuid.UUID) error
 }
 
 type Uploader interface {
@@ -80,9 +80,7 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	jobIDString := newJobID.String()
-
-	err = h.queue.Produce(r.Context(), jobIDString)
+	err = h.queue.Produce(r.Context(), newJobID)
 
 	if err != nil {
 		http.Error(w, "An error occurred while processing your resume", http.StatusInternalServerError)
@@ -91,8 +89,8 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	log.Printf("Job %s queued successfully at %s", jobIDString, uniqueFileName)
-	json.NewEncoder(w).Encode(map[string]string{"job_id": jobIDString})
+	log.Printf("Job %s queued successfully at %s", newJobID.String(), uniqueFileName)
+	json.NewEncoder(w).Encode(map[string]string{"job_id": newJobID.String()})
 }
 
 func (h *APIHandler) HandleViewResult(w http.ResponseWriter, r *http.Request) {

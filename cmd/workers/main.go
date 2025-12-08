@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"github.com/joho/godotenv"
-	"job-matcher/internal/postgresdb"
+	"job-matcher/internal/postgres"
 	"job-matcher/internal/processor"
+	"job-matcher/internal/redis"
 	"job-matcher/internal/s3"
-	"job-matcher/internal/valkeydb"
 	"log"
 	"os"
 	"os/signal"
@@ -28,13 +28,13 @@ func main() {
 	}
 	defer postgresDB.Close()
 
-	valkeyQueue, err := valkeydb.New(ctx, os.Getenv("VALKEY_URL"), os.Getenv("VALKEY_PASSWORD"))
+	redis, err := redis.New(ctx, os.Getenv("VALKEY_URL"), os.Getenv("VALKEY_PASSWORD"))
 
 	if err != nil {
 		log.Fatalf("Failed to initialize valkey: %v", err)
 	}
 
-	defer valkeyQueue.Close()
+	defer redis.Client.Close()
 
 	s3Conf := s3.S3Config{
 		EndpointURL: os.Getenv("S3_ENDPOINT_URL"),
@@ -56,10 +56,11 @@ func main() {
 
 	workerQueue := processor.NewJobProcessor(
 		postgresDB,
-		valkeyQueue,
+		redis,
 		s3Store,
 		bucketName,
 	)
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
