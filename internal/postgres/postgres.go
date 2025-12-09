@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"job-matcher/internal/models"
 )
@@ -35,50 +36,47 @@ func (s *Store) Close() {
 	s.Pool.Close()
 }
 
-func (s *Store) Create(ctx context.Context, jobID uuid.UUID, fileName string) {
+func (s *Store) Create(ctx context.Context, job *models.Job) error {
 
 	sql := `
 		INSERT into jobs (id, file_name)
 		VALUES ($1, $2, $3)
 		`
 
-	s.Pool.QueryRow(
+	_, err := s.Pool.Exec(
 		ctx,
-		sql,
-		jobID,
-		fileName,
-	)
-
+		sql, 
+		job.ID, 
+		job.FileName,
+		job.Status, 
+		job.ErrorMessage,
+		job.CreatedAt,
+		)
+	if err != nil { 
+		return fmt.Errorf("failed to insert job: %w", err)
+	} 
+	return nil 
 }
 
 func (s *Store) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
 
-	var retrievedJob models.Job
 
 	sql := `
-        SELECT id, file_name
+        SELECT *
         FROM jobs
         WHERE id = $1
         `
 
-	err := s.Pool.QueryRow(
-		ctx,
-		sql,
-		jobID,
-	).Scan(
-		&retrievedJob.ID,
-		&retrievedJob.FileName,
-	)
+	rows, _ := s.Pool.Query(ctx, sql, jobID) 
+
+	job, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByName[models.Job])
 
 	if err != nil {
-		return &models.Job{}, fmt.Errorf("ERROR: Failed to retrieve job with error: %w", err)
+
+		return nil, fmt.Errorf("failed to retrieve job with error: %w", err)
 	}
 
-	if err != nil {
-		return nil, fmt.Errorf("ERROR: database contains invalid job status string: %w", err)
-	}
-
-	return &retrievedJob, nil
+	return job, nil
 }
 
 func (s *Store) CompleteJob(ctx context.Context, jobID uuid.UUID, data string) error {
@@ -113,36 +111,11 @@ func (s *Store) FailJob(ctx context.Context, jobID uuid.UUID, errMsg error) erro
 	)
 
 	if err != nil {
-		return fmt.Errorf(err)
+		return fmt.Errorf("failed to update job status with error: %w", err)
 	}
 
 	return nil
 
 }
 
-func (s *Store) GetResult(ctx context.Context, jobID uuid.UUID) (*models.Job, error) { 
 
-	var resumeData models.Job
-
-	sql := `SELECT (resume_test, status) FROM jobs
-		WHERE id = $1
-	`
-
-
-	err := s.Pool.QueryRow(
-		ctx,
-		sql,
-		jobID,
-	).Scan(
-		&resumeData.ResumeText,
-		&resumeData.JobStatus,
-	)
-
-	if err != nil { 
-		return nil, fmt.Errorf("Error while getting resume text: %w", err)
-	}
-
-	return &resumeData, nil
-		
-
-}

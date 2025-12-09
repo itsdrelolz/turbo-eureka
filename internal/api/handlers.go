@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"time"
+
 	"github.com/google/uuid"
 )
 
@@ -20,8 +22,8 @@ type APIHandler struct {
 }
 
 type JobStore interface {
-	Create(ctx context.Context, jobID uuid.UUID, fileName string)
-	GetResult(ctx context.Context, jobID uuid.UUID) (*models.Job, error)
+	Create(ctx context.Context, job *models.Job) error
+	Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error)
 }
 
 type Producer interface {
@@ -64,7 +66,14 @@ func (h *APIHandler) UploadResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.job.Create(r.Context(), newJobID, uniqueFileName)
+	newJob := &models.Job{
+        ID:        newJobID,
+        FileName:  uniqueFileName,
+        Status: string(models.StatusQueued), // Ensure this constant is defined in models
+        CreatedAt: time.Now(),             // You'll need to import "time"
+    }
+
+	h.job.Create(r.Context(), newJob)
 
 	if err != nil {
 		http.Error(w, "An error occurred while processing your resume", http.StatusInternalServerError)
@@ -81,7 +90,9 @@ func (h *APIHandler) UploadResume(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	log.Printf("Job %s queued successfully at %s", newJobID.String(), uniqueFileName)
-	json.NewEncoder(w).Encode(map[string]string{"job_id": newJobID.String()})
+	if err := json.NewEncoder(w).Encode(newJobID); err != nil { 
+		log.Printf("Failed to encode response: %v", err)
+	}
 }
 
 func (h *APIHandler) ViewResult(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +112,7 @@ func (h *APIHandler) ViewResult(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid job id format", http.StatusBadRequest)
 	}
 
-	jobData, err := h.job.GetResult(r.Context(), jobID)
+	jobData, err := h.job.Get(r.Context(), jobID)
 
 	if err != nil {
 		log.Printf("Error retrieving job %s: %v", jobIDString, err)
@@ -112,8 +123,9 @@ func (h *APIHandler) ViewResult(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"job_id": jobIDString,
-		"status":      jobData.JobStatus.String(),
-		"resume_text": jobData.ResumeText,
-	})
+
+	if err := json.NewEncoder(w).Encode(jobData); err != nil { 
+		log.Printf("Failed to encode response: %v", err)
+	}
 }
+
