@@ -69,8 +69,8 @@ func (h *APIHandler) UploadResume(w http.ResponseWriter, r *http.Request) {
 	newJob := &models.Job{
         ID:        newJobID,
         FileName:  uniqueFileName,
-        Status: string(models.StatusQueued), // Ensure this constant is defined in models
-        CreatedAt: time.Now(),             // You'll need to import "time"
+        Status: string(models.StatusQueued), 
+        CreatedAt: time.Now(),             
     }
 
 	h.job.Create(r.Context(), newJob)
