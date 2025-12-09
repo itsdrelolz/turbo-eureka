@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
-
 	"github.com/google/uuid"
 )
 
@@ -43,17 +42,9 @@ func NewAPIHandler(db JobStore, queue Producer, store Uploader, s3Bucket string)
 
 }
 
-func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) UploadResume(w http.ResponseWriter, r *http.Request) {
 
 	defer r.Body.Close()
-	const MAX_UPLOAD_SIZE = 5 << 20 // 5 MB
-
-	r.Body = http.MaxBytesReader(w, r.Body, MAX_UPLOAD_SIZE)
-
-	if err := r.ParseMultipartForm(MAX_UPLOAD_SIZE); err != nil {
-		http.Error(w, "The uploaded file is too large. Please choose a file smaller than 5MB.", http.StatusBadRequest)
-		return
-	}
 
 	file, fileHeader, err := r.FormFile("resume")
 	if err != nil {
@@ -93,7 +84,7 @@ func (h *APIHandler) HandleUploadResume(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(map[string]string{"job_id": newJobID.String()})
 }
 
-func (h *APIHandler) HandleViewResult(w http.ResponseWriter, r *http.Request) {
+func (h *APIHandler) ViewResult(w http.ResponseWriter, r *http.Request) {
 
 	defer r.Body.Close()
 

@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"job-matcher/internal/models"
 	"log"
+	"rsc.io/pdf"
 	"strings"
 	"sync"
 	"unicode"
-	"github.com/google/uuid"
-	"rsc.io/pdf"
 )
 
 const (
@@ -43,7 +43,7 @@ type Downloader interface {
 type JobStore interface {
 	Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error)
 	CompleteJob(ctx context.Context, jobID uuid.UUID, data string) error
-	FailJob(ctx context.Context, jobID uuid.UUID, errMsg error) error 
+	FailJob(ctx context.Context, jobID uuid.UUID, errMsg error) error
 }
 type JobProcessor struct {
 	db     JobStore
@@ -92,6 +92,7 @@ func (p *JobProcessor) startWorker(ctx context.Context, result chan<- JobEvent) 
 
 			if err != nil {
 				log.Printf("Failed to pull job from queue with err: %w", err)
+				continue
 			}
 
 			jobData, err := p.db.Get(ctx, jobID)
@@ -128,7 +129,6 @@ func (p *JobProcessor) aggregator(events <-chan JobEvent) {
 		switch evt.Type {
 		case JobCompleted:
 			p.db.CompleteJob(ctx, evt.JobID, evt.Data)
-
 		case JobFailed:
 			p.db.FailJob(ctx, evt.JobID, evt.Err)
 		}
@@ -176,5 +176,4 @@ func (p *JobProcessor) extractText(resume io.ReadCloser) (string, error) {
 
 	// Remove all occurences of the replacment char in the resulting string
 	return strings.ReplaceAll(result.String(), replacementChar, ""), nil
-
 }

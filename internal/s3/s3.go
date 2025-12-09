@@ -53,6 +53,7 @@ func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, co
 
 	_, err := fs.Client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
+		ChecksumAlgorithm: "SHA256",
 		Key:         aws.String(key),
 		Body:        file,
 		ContentType: aws.String(contentType),
@@ -77,4 +78,13 @@ func (fs *FileStore) Download(ctx context.Context, bucket, key string) (io.ReadC
 	defer result.Body.Close()
 
 	return result.Body, nil
+}
+
+// TODO this function is meant to use the checksum of each object in the s3 bucket and compare with the users newly uploaded file 
+// If the checksum matches, return true if the file is already uploaded to the bucket, preventing unecessary duplicate extractions 
+
+func (fs *FileStore) IsDuplicate(ctx context.Context, bucket, key string) bool { 
+
+
+
 }

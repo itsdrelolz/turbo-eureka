@@ -81,10 +81,9 @@ func (s *Store) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
 	return &retrievedJob, nil
 }
 
-
 func (s *Store) CompleteJob(ctx context.Context, jobID uuid.UUID, data string) error {
-    sql := `UPDATE jobs 
-              SET status = 'COMPLETED', result_text = $1, updated_at = NOW() 
+	sql := `UPDATE jobs 
+              SET status = 'COMPLETED', result_text = $1
               WHERE id = $2`
 
 	err := s.Pool.QueryRow(
@@ -93,18 +92,19 @@ func (s *Store) CompleteJob(ctx context.Context, jobID uuid.UUID, data string) e
 		jobID,
 	)
 
-	if err != nil { 
-		return fmt.Errorf(err) 
+	if err != nil {
+		return fmt.Errorf(err)
 	}
 
 	return nil
 
 }
 
-func (s *Store) FailedJob(ctx context.Context, jobID uuid.UUID, errMsg error) error {
-    sql := `UPDATE jobs 
-              SET status = 'FAILED', error_message = $1, updated_at = NOW() 
+func (s *Store) FailJob(ctx context.Context, jobID uuid.UUID, errMsg error) error {
+	sql := `UPDATE jobs 
+              SET status = 'FAILED', error_message = $1 
               WHERE id = $2`
+
 	err := s.Pool.QueryRow(
 		ctx,
 		sql,
@@ -112,11 +112,37 @@ func (s *Store) FailedJob(ctx context.Context, jobID uuid.UUID, errMsg error) er
 		jobID,
 	)
 
-	if err != nil { 
-		return fmt.Errorf(err) 
+	if err != nil {
+		return fmt.Errorf(err)
 	}
 
 	return nil
 
+}
+
+func (s *Store) GetResult(ctx context.Context, jobID uuid.UUID) (*models.Job, error) { 
+
+	var resumeData models.Job
+
+	sql := `SELECT (resume_test, status) FROM jobs
+		WHERE id = $1
+	`
+
+
+	err := s.Pool.QueryRow(
+		ctx,
+		sql,
+		jobID,
+	).Scan(
+		&resumeData.ResumeText,
+		&resumeData.JobStatus,
+	)
+
+	if err != nil { 
+		return nil, fmt.Errorf("Error while getting resume text: %w", err)
+	}
+
+	return &resumeData, nil
+		
 
 }
