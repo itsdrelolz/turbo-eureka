@@ -18,12 +18,10 @@ func NewRouter(h *APIHandler) http.Handler {
   	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestSize( 5 * 1024 * 1024))
 
-	r.Get("/health", h.CheckHealth)
-	r.Post("/resumes", h.UploadResume)
+	r.Post("/upload", h.UploadResume)
 
 	r.Get("/resumes/{jobID}", h.ViewResult)
 
-	r.Get("/resumes/{jobID}/status", h.TODO)
 	return r
 }
 

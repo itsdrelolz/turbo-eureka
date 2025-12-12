@@ -75,7 +75,6 @@ func (fs *FileStore) Download(ctx context.Context, bucket, key string) (io.ReadC
 	if err != nil {
 		return nil, fmt.Errorf("ERROR: failed to download file: %w", err)
 	}
-	defer result.Body.Close()
 
 	return result.Body, nil
 }

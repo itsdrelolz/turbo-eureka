@@ -1,24 +1,27 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-type Status string 
+type Status int
 
-const (
-	StatusQueued     Status = "QUEUED"
-	StatusProcessing Status = "PROCESSING"
-	StatusCompleted  Status = "COMPLETED"
-	StatusFailed     Status = "FAILED"
+// default status in database is set as value 1 or "QUEUED" 
+const ( 
+	StatusUnknown Status = iota 
+	StatusQueued           // 1 
+	StatusPending          // 2 
+	StatusCompleted        // 3 
+	StatusFailed           // 4
 )
 
 type Job struct {
 	ID uuid.UUID `json:"id" db:"id"`
 
-	Status string `json:"status" db:"status"`
+	Status Status `json:"status" db:"status"`
 
 	FileName string `json:"file_name" db:"file_name"`
 
@@ -29,3 +32,25 @@ type Job struct {
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 
 }
+
+
+func (s Status) String() string { 
+	switch s { 
+	case StatusQueued:
+		return "queued" 
+	case StatusPending: 
+		return "pending"
+	case StatusCompleted:
+		return "completed"
+	case StatusFailed:
+		return "failed"
+	default:
+		return "unknown"
+	}
+}
+
+func (s Status) MarshallJSON() ([]byte, error) { 
+	return json.Marshal(s.String())
+}
+
+

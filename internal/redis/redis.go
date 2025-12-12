@@ -32,33 +32,38 @@ func (v *RedisClient) HealthCheck(ctx context.Context) error {
 	return nil
 }
 
-// This method should insert a job, and then update the job as pending in the postgres db
-func (v *RedisClient) Produce(ctx context.Context, jobID uuid.UUID) error {
 
-	JobID := jobID.String()
+func (v *RedisClient) Produce(ctx context.Context, jobID uuid.UUID, s3Key string) error {
 
-	err := v.Client.LPush(ctx, "queue:pending", JobID).Err()
+	err := v.Client.LPush(ctx, "queue", jobID, s3Key).Err()
 
-	if err != nil {
-		return fmt.Errorf("ERROR: Failed to push job into redis queue with: %w", err)
+	if err != nil { 
+		return fmt.Errorf("failed to push job onto queue: %w", err)
 	}
 
 	return nil
+
 }
 
-// moves the job into a processing list, ensuring data safety in the case of a worker crashing
-func (v *RedisClient) Consume(ctx context.Context) (uuid.UUID, error) {
+func (v *RedisClient) Consume(ctx context.Context) (uuid.UUID, string, error) {
 
-	jobID, err := v.Client.BLMove(ctx, "queue:pending", "queue:processing", "RIGHT", "LEFT", 0).Result()
 
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("Failed to move job into processing queue with: %w", err)
+	result, err := v.Client.BRPop(ctx, 0, "queue").Result()
+
+
+
+	if err != nil { 
+		return uuid.Nil, "", fmt.Errorf("redis BRPop failed: %w", err)
 	}
 
-	JobID, err := uuid.Parse(jobID)
+	jobIdStr, s3Key := result[1], result[2] 
 
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("Failed to convert job ID into valid uuid, given: %v, with: %w", jobID, err)
+
+	
+	jobID, parseErr := uuid.Parse(jobIdStr)
+
+	if parseErr != nil { 
+		return uuid.Nil, "", fmt.Errorf("invalid ID in the queue: %q, Errof: %w", jobIdStr, parseErr)
 	}
-	return JobID, nil
+		return jobID, s3Key, nil
 }

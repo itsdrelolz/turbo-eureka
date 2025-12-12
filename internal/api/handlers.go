@@ -27,7 +27,7 @@ type JobStore interface {
 }
 
 type Producer interface {
-	Produce(ctx context.Context, jobID uuid.UUID) error
+	Produce(ctx context.Context, jobID uuid.UUID, s3Key string) error
 }
 
 type Uploader interface {
@@ -69,7 +69,7 @@ func (h *APIHandler) UploadResume(w http.ResponseWriter, r *http.Request) {
 	newJob := &models.Job{
         ID:        newJobID,
         FileName:  uniqueFileName,
-        Status: string(models.StatusQueued), 
+        Status: models.StatusQueued, 
         CreatedAt: time.Now(),             
     }
 
@@ -80,7 +80,7 @@ func (h *APIHandler) UploadResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.queue.Produce(r.Context(), newJobID)
+	err = h.queue.Produce(r.Context(), newJobID, uniqueFileName)
 
 	if err != nil {
 		http.Error(w, "An error occurred while processing your resume", http.StatusInternalServerError)
