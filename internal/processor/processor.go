@@ -10,9 +10,8 @@ import (
 	"sync"
 	"time"
 	"unicode"
-
+	"os/exec"
 	"github.com/google/uuid"
-	"rsc.io/pdf"
 )
 
 const (
@@ -67,8 +66,6 @@ func (p *JobProcessor) Run(ctx context.Context) {
 	}()
 
 	wg.Wait()
-
-	wg.Done()
 
 }
 
@@ -148,37 +145,15 @@ func (p *JobProcessor) extractText(resume io.ReadCloser) (string, error) {
 	// this character will be removed from the output
 	const replacementChar = string(unicode.ReplacementChar)
 
-	fileBytes, err := io.ReadAll(resume)
+	cmd := exec.Command("pdftotext", "-layout", "-", "-")
+    	cmd.Stdin = resume
 
-	if err != nil {
-		return "", fmt.Errorf("Failed to read file stream: %w", err)
-	}
+    	var out bytes.Buffer
+    	cmd.Stdout = &out
 
-	readerAt := bytes.NewReader(fileBytes)
+    	if err := cmd.Run(); err != nil {
+        	return "", fmt.Errorf("pdftotext failed: %w", err)
+    	}
 
-	reader, err := pdf.NewReader(readerAt, int64(len(fileBytes)))
-
-	if err != nil {
-		return "", fmt.Errorf("Failed to open file: %w", err)
-	}
-
-	var result strings.Builder
-
-	numPages := reader.NumPage()
-
-	for i := 1; i <= numPages; i++ {
-		page := reader.Page(i)
-
-		content := page.Content()
-
-		text := content.Text
-
-		for _, t := range text {
-			result.WriteString(t.S)
-		}
-		result.WriteString("\n")
-	}
-
-	// Remove all occurences of the replacment char in the resulting string
-	return strings.ReplaceAll(result.String(), replacementChar, ""), nil
+	return strings.ReplaceAll(out.String(), replacementChar, ""), nil
 }

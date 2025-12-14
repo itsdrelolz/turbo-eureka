@@ -15,9 +15,13 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/api ./cmd/api
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/worker ./cmd/workers
 
+
 FROM alpine:latest
 
 WORKDIR /root/
+
+#necessary for reliable pdf parsing
+RUN apk add --no-cache poppler-utils
 
 
 COPY --from=builder /bin/api .

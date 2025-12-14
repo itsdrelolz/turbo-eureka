@@ -1,4 +1,4 @@
-package postgresdb
+package postgres
 
 import (
 	"context"
@@ -112,11 +112,16 @@ func (s *Store) FailJob(ctx context.Context, jobID uuid.UUID, errMsg error) erro
               SET status = $1, error_message = $2 
               WHERE id = $3`
 
+	var errString string
+
+	if errMsg != nil { 
+		errString = errMsg.Error() 
+	}
 	commandTag, err := s.Pool.Exec(
 		ctx,
 		sql,
 		models.StatusFailed,
-		errMsg,
+		errString,
 		jobID,
 	)
 
