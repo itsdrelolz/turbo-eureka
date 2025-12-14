@@ -115,7 +115,7 @@ func (s *Store) FailJob(ctx context.Context, jobID uuid.UUID, errMsg error) erro
 	commandTag, err := s.Pool.Exec(
 		ctx,
 		sql,
-		models.StatusCompleted,
+		models.StatusFailed,
 		errMsg,
 		jobID,
 	)

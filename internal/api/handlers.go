@@ -76,6 +76,7 @@ func (h *APIHandler) UploadResume(w http.ResponseWriter, r *http.Request) {
 
 	h.job.Create(r.Context(), newJob)
 
+
 	err = h.queue.Produce(r.Context(), newJobID, uniqueFileName)
 
 	if err != nil {
@@ -90,9 +91,6 @@ func (h *APIHandler) UploadResume(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to encode response: %v", err)
 	}
 }
-
-// TODO:
-// fix malformed status in json response
 
 func (h *APIHandler) ViewResult(w http.ResponseWriter, r *http.Request) {
 
@@ -119,9 +117,14 @@ func (h *APIHandler) ViewResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println(jobData.Status.String())
+	
+
 	w.Header().Set("Content-Type", "application/json")
 
 	w.WriteHeader(http.StatusOK)
+
+
 
 	if err := json.NewEncoder(w).Encode(jobData); err != nil {
 		log.Printf("Failed to encode response: %v", err)
