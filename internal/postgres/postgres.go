@@ -2,11 +2,13 @@ package postgresdb
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"job-matcher/internal/models"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"job-matcher/internal/models"
 )
 
 type Store struct {
@@ -40,39 +42,40 @@ func (s *Store) Create(ctx context.Context, job *models.Job) error {
 
 	sql := `
 		INSERT into jobs (id, file_name)
-		VALUES ($1, $2, $3)
+		VALUES ($1, $2)
 		`
 
 	_, err := s.Pool.Exec(
 		ctx,
-		sql, 
-		job.ID, 
+		sql,
+		job.ID,
 		job.FileName,
-		job.Status, 
-		job.ErrorMessage,
-		job.CreatedAt,
-		)
-	if err != nil { 
+	)
+	if err != nil {
 		return fmt.Errorf("failed to insert job: %w", err)
-	} 
-	return nil 
+	}
+	return nil
 }
 
 func (s *Store) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
-
 
 	sql := `
         SELECT *
         FROM jobs
         WHERE id = $1
-        `
+    `
 
-	rows, _ := s.Pool.Query(ctx, sql, jobID) 
+	rows, err := s.Pool.Query(ctx, sql, jobID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query job: %w", err)
+	}
 
 	job, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByName[models.Job])
 
 	if err != nil {
-
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("job not found: %w", err)
+		}
 		return nil, fmt.Errorf("failed to retrieve job with error: %w", err)
 	}
 
@@ -81,17 +84,23 @@ func (s *Store) Get(ctx context.Context, jobID uuid.UUID) (*models.Job, error) {
 
 func (s *Store) CompleteJob(ctx context.Context, jobID uuid.UUID, data string) error {
 	sql := `UPDATE jobs 
-              SET status = 'COMPLETED', result_text = $1
-              WHERE id = $2`
+              SET status = $1, resume_text = $2
+              WHERE id = $3`
 
-	err := s.Pool.QueryRow(
+	commandTag, err := s.Pool.Exec(
 		ctx,
 		sql,
+		models.StatusCompleted,
+		data,
 		jobID,
 	)
 
 	if err != nil {
-		return fmt.Errorf(err)
+		return fmt.Errorf("failed to update job: %v", err)
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("no job found with id %s", jobID)
 	}
 
 	return nil
@@ -100,22 +109,24 @@ func (s *Store) CompleteJob(ctx context.Context, jobID uuid.UUID, data string) e
 
 func (s *Store) FailJob(ctx context.Context, jobID uuid.UUID, errMsg error) error {
 	sql := `UPDATE jobs 
-              SET status = 'FAILED', error_message = $1 
-              WHERE id = $2`
+              SET status = $1, error_message = $2 
+              WHERE id = $3`
 
-	err := s.Pool.QueryRow(
+	commandTag, err := s.Pool.Exec(
 		ctx,
 		sql,
-		errMsg.Error(),
+		models.StatusCompleted,
+		errMsg,
 		jobID,
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to update job status with error: %w", err)
+		return fmt.Errorf("failed to update job: %v", err)
 	}
 
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("no job found with id %s", jobID)
+	}
 	return nil
 
 }
-
-

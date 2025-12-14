@@ -52,11 +52,11 @@ func (fs *FileStore) Upload(ctx context.Context, file io.Reader, bucket, key, co
 	}
 
 	_, err := fs.Client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(bucket),
+		Bucket:            aws.String(bucket),
 		ChecksumAlgorithm: "SHA256",
-		Key:         aws.String(key),
-		Body:        file,
-		ContentType: aws.String(contentType),
+		Key:               aws.String(key),
+		Body:              file,
+		ContentType:       aws.String(contentType),
 	})
 
 	if err != nil {
@@ -78,4 +78,3 @@ func (fs *FileStore) Download(ctx context.Context, bucket, key string) (io.ReadC
 
 	return result.Body, nil
 }
-

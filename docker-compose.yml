@@ -1,5 +1,4 @@
 services:
-  # --- Application Services ---
   api:
     build:
       context: .
@@ -17,10 +16,14 @@ services:
       - S3_SECRET_KEY=minioadmin
       - S3_BUCKET_NAME=resumes
     depends_on:
-      - db
-      - redis
-      - minio
-      - createbuckets
+      db: 
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+      createbuckets:
+          condition: service_completed_successfully
 
   worker:
     build:
@@ -28,30 +31,38 @@ services:
       dockerfile: Dockerfile
     command: ./worker
     environment:
-      - DATABASE_URL=postgres://user:password@db:5432/turbo_eureka?sslmode=disable
+      - DATABASE_URL=postgres://user:password@db:5432/job_queue?sslmode=disable
       - REDIS_URL=redis:6379
-      - VALKEY_PASSWORD=
+      - REDIS_PASSWORD=
       - S3_ENDPOINT_URL=http://minio:9000
       - S3_REGION=us-east-1
       - S3_ACCESS_KEY=minioadmin
       - S3_SECRET_KEY=minioadmin
       - S3_BUCKET_NAME=resumes
     depends_on:
-      - db
-      - redis
-      - minio
+      db: 
+        condition: service_healthy
+      redis: 
+        condition: service_started
+      minio:
+        condition: service_started
 
-  # --- Infrastructure Services ---
   db:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: turbo_eureka
+      POSTGRES_DB: job_queue
     ports:
       - "5432:5432"
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d job_queue"]
+      interval: 5s
+      timeout: 5s 
+      retries: 5
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Auto-runs your SQL migration
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql 
       - postgres_data:/var/lib/postgresql/data
 
   redis:
@@ -68,12 +79,11 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000" # API
-      - "9001:9001" # Console
+      - "9000:9000" 
+      - "9001:9001" 
     volumes:
       - minio_data:/data
 
-  # Utility container to create the bucket automatically
   createbuckets:
     image: minio/mc
     depends_on:

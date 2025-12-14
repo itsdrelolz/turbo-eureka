@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -67,18 +68,13 @@ func (h *APIHandler) UploadResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newJob := &models.Job{
-        ID:        newJobID,
-        FileName:  uniqueFileName,
-        Status: models.StatusQueued, 
-        CreatedAt: time.Now(),             
-    }
+		ID:        newJobID,
+		FileName:  uniqueFileName,
+		Status:    models.StatusQueued,
+		CreatedAt: time.Now(),
+	}
 
 	h.job.Create(r.Context(), newJob)
-
-	if err != nil {
-		http.Error(w, "An error occurred while processing your resume", http.StatusInternalServerError)
-		return
-	}
 
 	err = h.queue.Produce(r.Context(), newJobID, uniqueFileName)
 
@@ -90,19 +86,22 @@ func (h *APIHandler) UploadResume(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	log.Printf("Job %s queued successfully at %s", newJobID.String(), uniqueFileName)
-	if err := json.NewEncoder(w).Encode(newJobID); err != nil { 
+	if err := json.NewEncoder(w).Encode(newJobID); err != nil {
 		log.Printf("Failed to encode response: %v", err)
 	}
 }
+
+// TODO:
+// fix malformed status in json response
 
 func (h *APIHandler) ViewResult(w http.ResponseWriter, r *http.Request) {
 
 	defer r.Body.Close()
 
-	jobIDString := r.URL.Query().Get("id")
+	jobIDString := chi.URLParam(r, "jobID")
 
 	if jobIDString == "" {
-		http.Error(w, "Missing job ID. Please provide it as a query parameter: ?id=UUID", http.StatusBadRequest)
+		http.Error(w, "Missing job ID.", http.StatusBadRequest)
 		return
 	}
 
@@ -124,8 +123,7 @@ func (h *APIHandler) ViewResult(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 
-	if err := json.NewEncoder(w).Encode(jobData); err != nil { 
+	if err := json.NewEncoder(w).Encode(jobData); err != nil {
 		log.Printf("Failed to encode response: %v", err)
 	}
 }
-

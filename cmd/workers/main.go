@@ -1,4 +1,4 @@
-package mainmain
+package main
 
 import (
 	"context"
@@ -15,23 +15,22 @@ import (
 
 func main() {
 
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, relying on system environment variables")
 	}
 
 	ctx := context.Background()
 	postgresDB, err := postgresdb.New(ctx, os.Getenv("DATABASE_URL"))
 
 	if err != nil {
-		log.Fatalf("Failed to initialize postgresdb: %v", err)
+		log.Fatalln("Failed to initialize postgresdb")
 	}
 	defer postgresDB.Close()
 
-	redis, err := redis.New(ctx, os.Getenv("VALKEY_URL"), os.Getenv("VALKEY_PASSWORD"))
+	redis, err := redis.New(ctx, os.Getenv("REDIS_URL"), os.Getenv("REDIS_PASSWORD"))
 
 	if err != nil {
-		log.Fatalf("Failed to initialize valkey: %v", err)
+		log.Fatalln("Failed to initialize redis")
 	}
 
 	defer redis.Client.Close()
@@ -46,7 +45,7 @@ func main() {
 	s3Store, err := s3.NewFileStore(ctx, s3Conf)
 
 	if err != nil {
-		log.Fatalf("Could not create S3 filestore: %v", err)
+		log.Fatalln("Could not create S3 filestore")
 	}
 
 	bucketName := os.Getenv("S3_BUCKET_NAME")
