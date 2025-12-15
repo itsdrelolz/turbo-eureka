@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"log"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
-	"os/exec"
-	"github.com/google/uuid"
 )
 
 const (
@@ -48,6 +48,7 @@ func NewJobProcessor(db JobStore, queue Consumer, s3 Downloader, bucket string) 
 
 func (p *JobProcessor) Run(ctx context.Context) {
 
+	// creates a buffered channel, limiting possible data loss
 	result := make(chan JobMetaData, numWorkers*2)
 
 	var wg sync.WaitGroup
@@ -146,14 +147,14 @@ func (p *JobProcessor) extractText(resume io.ReadCloser) (string, error) {
 	const replacementChar = string(unicode.ReplacementChar)
 
 	cmd := exec.Command("pdftotext", "-layout", "-", "-")
-    	cmd.Stdin = resume
+	cmd.Stdin = resume
 
-    	var out bytes.Buffer
-    	cmd.Stdout = &out
+	var out bytes.Buffer
+	cmd.Stdout = &out
 
-    	if err := cmd.Run(); err != nil {
-        	return "", fmt.Errorf("pdftotext failed: %w", err)
-    	}
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("pdftotext failed: %w", err)
+	}
 
 	return strings.ReplaceAll(out.String(), replacementChar, ""), nil
 }

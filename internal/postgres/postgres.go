@@ -114,8 +114,8 @@ func (s *Store) FailJob(ctx context.Context, jobID uuid.UUID, errMsg error) erro
 
 	var errString string
 
-	if errMsg != nil { 
-		errString = errMsg.Error() 
+	if errMsg != nil {
+		errString = errMsg.Error()
 	}
 	commandTag, err := s.Pool.Exec(
 		ctx,

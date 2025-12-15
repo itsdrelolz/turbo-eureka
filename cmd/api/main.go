@@ -25,7 +25,7 @@ func main() {
 
 	ctx := context.Background()
 
-	db, err := postgresdb.New(ctx, os.Getenv("DATABASE_URL"))
+	db, err := postgres.New(ctx, os.Getenv("DATABASE_URL"))
 
 	if err != nil {
 		log.Fatalln("Failed to initialize postgres")

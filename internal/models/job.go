@@ -47,6 +47,6 @@ func (s Status) String() string {
 	}
 }
 
-func (s Status) MarshallJSON() ([]byte, error) {
+func (s Status) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.String())
 }
