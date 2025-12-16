@@ -15,6 +15,7 @@ type Store struct {
 	Pool *pgxpool.Pool
 }
 
+
 func New(ctx context.Context, connString string) (*Store, error) {
 	if connString == "" {
 		return nil, fmt.Errorf("ERROR: database connection string is required")
